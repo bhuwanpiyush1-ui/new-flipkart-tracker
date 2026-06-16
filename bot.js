@@ -3,25 +3,26 @@ const axios = require('axios');
 const express = require('express');
 
 // --- CONFIGURATION ---
-const BOT_TOKEN = '8923597334:AAEm75cG0EbDinDksLc2Dki28EYfjbfS_eQ'; // Fresh Token Fixed
-const ADMIN_CHAT_ID = '7485181331'; // Admin Chat ID Fixed
-const CHECK_INTERVAL = 15000; 
+const BOT_TOKEN = '8923597334:AAEm75cG0EbDinDksLc2Dki28EYfjbfS_eQ'; // Aapka fresh verified token
+const ADMIN_CHAT_ID = '7485181331'; // Admin ID Fixed
+const CHECK_INTERVAL = 15000; // 15 Seconds refresh rate
 const RENDER_URL = 'https://instamart-tracker-bot.onrender.com/'; 
 // ---------------------
 
 const bot = new Telegraf(BOT_TOKEN);
 const activeUsers = {};
 
+// Safe initial persistent array setup for approvals
 if (!global.fkApprovedList) {
     global.fkApprovedList = [ADMIN_CHAT_ID.toString()];
 }
 
 const app = express();
 const PORT = process.env.PORT || 10000;
-app.get('/', (req, res) => res.status(200).send('Flipkart Approval Engine Online!'));
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 FK Port Binding Successful on ${PORT}`));
+app.get('/', (req, res) => res.status(200).send('Master Control Hybrid Engine Live!'));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Master Engine Port Binding Successful on ${PORT}`));
 
-// 🔥 ALIVE JHATKA SYSTEM
+// 🔥 ALIVE JHATKA SYSTEM (Bypasses Render Sleep State)
 setInterval(() => {
     axios.get(RENDER_URL).catch(() => {}); 
 }, 30000); 
@@ -31,25 +32,26 @@ function isUserApproved(userId) {
     return global.fkApprovedList.map(String).includes(userId.toString());
 }
 
+// --- CALLBACK BUTTONS HANDLER ---
 bot.on('callback_query', async (ctx) => {
     const data = ctx.callbackQuery.data;
     const chatId = ctx.chat.id.toString();
     const clickerId = ctx.from.id.toString();
     
-    // Stop Tracking handler
+    // Stop single track button handler
     if (data.startsWith('stop_fk_')) {
         const index = parseInt(data.split('_')[2]);
         if (activeUsers[chatId] && activeUsers[chatId][index]) {
             const removedItem = activeUsers[chatId][index];
             clearInterval(removedItem.interval);
             activeUsers[chatId].splice(index, 1);
-            await ctx.answerCbQuery("Flipkart tracking band kar di gayi hai! 🛑").catch(() => {});
+            await ctx.answerCbQuery("Tracking band kar di gayi hai! 🛑").catch(() => {});
             return ctx.reply(`🛑 Stopped tracking for:\n${removedItem.url}`, { disable_web_page_preview: true });
         }
         return ctx.answerCbQuery("⚠️ Already stopped.").catch(() => {});
     }
 
-    // Strict validation for admin action buttons
+    // Strict Admin Button Protection
     if (clickerId !== ADMIN_CHAT_ID.toString()) {
         return ctx.answerCbQuery("❌ Unauthorized! Sirf Admin click kar sakta hai.").catch(() => {});
     }
@@ -62,8 +64,8 @@ bot.on('callback_query', async (ctx) => {
         }
         await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n✅ **Status: Approved!**`).catch(() => {});
         
-        // 🔥 ORIGINAL REQ: USER KO HOONCHTA HUA MUBARAK HO MESSAGE
-        await bot.telegram.sendMessage(targetUserId, "🎉 **Mubarak ho! Admin ne aapka access approve kar diya hai!**\n\nAb aap bot ka use kar sakte hain.\n👉 Link track karne ke liye type karein: `/track_fk <Flipkart_URL>`", { parse_mode: 'Markdown' }).catch(() => {});
+        // Classic "Mubarak ho" message
+        await bot.telegram.sendMessage(targetUserId, "🎉 **Mubarak ho! Admin ne aapka access approve kar diya hai!**\n\nAb aap bot ka use kar sakte hain.\n👉 Link track karne ke liye type karne ka format:\n`/start_track <Flipkart_URL>`", { parse_mode: 'Markdown' }).catch(() => {});
     } else if (data.startsWith('decline_')) {
         await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n❌ **Status: Declined!**`).catch(() => {});
         await bot.telegram.sendMessage(targetUserId, "❌ Sorry! Admin ne aapka access request decline kar diya hai.").catch(() => {});
@@ -71,20 +73,19 @@ bot.on('callback_query', async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
 });
 
+// --- COMMAND: START (REQUEST SYSTEM) ---
 bot.start((ctx) => {
     const userId = ctx.from.id.toString();
     const name = `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim() || 'No Name';
     
     if (isUserApproved(userId)) {
-        return ctx.reply(`🤖 *Welcome Back ${ctx.from.first_name || ''}!* Flipkart Stock Tracker Active!\n\n🔹 **Format:**\n\`/track_fk <Flipkart_Product_URL>\`\n\n🔹 \`/stop_all_fk\``, { parse_mode: 'Markdown' });
+        return ctx.reply(`🤖 *Welcome ${ctx.from.first_name || ''}!* Master Control Tracker Active!\n\n🔹 **User Commands:**\n🚀 \`/start_track <Flipkart_URL>\` — Naya link lagaen\n📋 \`/list_track\` — Chal rahe active links dekhein\n🛑 \`/stop_all\` — Saari tracking band karein\n\n👑 **Admin Special Commands:**\n✅ \`/approve <User_ID>\` — User allowed karein\n📋 \`/list_users\` — Approved users ki list\n❌ \`/remove_user <User_ID>\` — User block karein`, { parse_mode: 'Markdown' });
     }
     
-    // Phle access lock dikhayega
     ctx.reply(`🔒 **Access Denied!**\n\nAap abhi approved nahi hain.\nAapki Telegram ID: \`${userId}\`\n\nAdmin ke paas request bhej di gayi hai, kripya wait karein...`);
     
-    // Admin ke paas inline action button ke sath request jayegi
     bot.telegram.sendMessage(ADMIN_CHAT_ID, 
-        `🚨 **New Flipkart Bot Request!**\n\n👤 Name: ${name}\n🆔 ID: \`${userId}\`\n\n👉 Approve karne ke liye niche click karein ya type karein:\n\`/approve ${userId}\``,
+        `🚨 **New Access Request!**\n\n👤 Name: ${name}\n🆔 ID: \`${userId}\`\n\n👉 Approve karne ke liye niche click karein ya type karein:\n\`/approve ${userId}\``,
         {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
@@ -97,6 +98,7 @@ bot.start((ctx) => {
     ).catch(() => {});
 });
 
+// --- COMMAND: APPROVE (ADMIN ONLY) ---
 bot.command('approve', (ctx) => {
     if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Sirf Admin hi approve kar sakta hai!");
     const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
@@ -105,16 +107,55 @@ bot.command('approve', (ctx) => {
     const targetUserId = args[1].trim();
     if (!global.fkApprovedList.map(String).includes(targetUserId)) {
         global.fkApprovedList.push(targetUserId);
-        ctx.reply(`✅ User ID \`${targetUserId}\` approved.`);
+        ctx.reply(`✅ User ID \`${targetUserId}\` ko approve kar diya gaya.`);
         
-        // Command manual chalane par bhi seame badhiya text trigger hoga
-        bot.telegram.sendMessage(targetUserId, "🎉 **Mubarak ho! Admin ne aapka access approve kar diya hai!**\n\nAb aap bot ka use kar sakte hain.\n👉 Link track karne ke liye type karein: `/track_fk <Flipkart_URL>`", { parse_mode: 'Markdown' }).catch(() => {});
+        bot.telegram.sendMessage(targetUserId, "🎉 **Mubarak ho! Admin ne aapka access approve kar diya hai!**\n\nAb aap bot ka use kar sakte hain.\n👉 Link track karne ke liye type karne ka format:\n`/start_track <Flipkart_URL>`", { parse_mode: 'Markdown' }).catch(() => {});
     } else {
-        ctx.reply("⚠️ Already approved.");
+        ctx.reply("⚠️ Yeh user pehle se hi approved hai.");
     }
 });
 
-bot.command('track_fk', async (ctx) => {
+// --- COMMAND: LIST USERS (ADMIN ONLY) ---
+bot.command('list_users', (ctx) => {
+    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Sirf Admin hi approved users dekh sakta hai!");
+    if (!global.fkApprovedList || global.fkApprovedList.length === 0) return ctx.reply("📋 Koyi approved user nahi hai.");
+    
+    let msg = "📋 **Approved Users List:**\n\n";
+    global.fkApprovedList.forEach((user, index) => {
+        msg += `${index + 1}. ID: \`${user}\` ${user === ADMIN_CHAT_ID ? '(👑 Admin)' : ''}\n`;
+    });
+    ctx.reply(msg, { parse_mode: 'Markdown' });
+});
+
+// --- COMMAND: REMOVE USER (ADMIN ONLY) ---
+bot.command('remove_user', (ctx) => {
+    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Sirf Admin hi user remove kar sakta hai!");
+    const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
+    if (args.length < 2) return ctx.reply("⚠️ Format: `/remove_user <User_ID>`");
+    
+    const targetUserId = args[1].trim();
+    if (targetUserId === ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Bhai khud ko remove nahi kar sakte!");
+    
+    const index = global.fkApprovedList.map(String).indexOf(targetUserId);
+    if (index !== -1) {
+        global.fkApprovedList.splice(index, 1);
+        ctx.reply(`❌ User ID \`${targetUserId}\` ka access block/remove kar diya gaya.`);
+        
+        // Notify user about removal
+        bot.telegram.sendMessage(targetUserId, "🔒 **Aapka access admin dwara remove kar diya gaya hai.**").catch(() => {});
+        
+        // Force stop all active tasks of that removed user
+        if (activeUsers[targetUserId]) {
+            activeUsers[targetUserId].forEach(item => clearInterval(item.interval));
+            delete activeUsers[targetUserId];
+        }
+    } else {
+        ctx.reply("⚠️ Yeh ID approved list mein nahi mili.");
+    }
+});
+
+// --- COMMAND: START TRACK (USER & ADMIN) ---
+bot.command('start_track', async (ctx) => {
     const userId = ctx.from.id.toString();
     if (!isUserApproved(userId)) return ctx.reply("❌ Access Denied! Aap approved nahi hain.");
     
@@ -122,7 +163,7 @@ bot.command('track_fk', async (ctx) => {
     const args = ctx.message.text.replace(/\n/g, ' ').split(' ').filter(arg => arg.trim() !== '');
     
     let fkLink = args.find(arg => arg.includes('flipkart.com/'));
-    if (!fkLink) return ctx.reply("❌ Valid Flipkart product link bhejo bhai!");
+    if (!fkLink) return ctx.reply("❌ Sahi Flipkart product link bhejo bhai!");
     
     let pid = "";
     try {
@@ -144,19 +185,43 @@ bot.command('track_fk', async (ctx) => {
     const intervalId = setInterval(() => { checkFlipkartStock(ctx, chatId, pid, fkLink); }, CHECK_INTERVAL);
     activeUsers[chatId].push({ id: pid, url: fkLink, interval: intervalId });
     
-    ctx.reply(`🚀 **Flipkart Tracking Active!**\n📦 Product Registered successfully.\nScanning stock updates...`);
+    ctx.reply(`🚀 **Flipkart Tracking Active!**\n📦 Product locked successfully.\nStock scanning live...`);
     checkFlipkartStock(ctx, chatId, pid, fkLink);
 });
 
-bot.command('stop_all_fk', (ctx) => {
+// --- COMMAND: LIST TRACK (USER & ADMIN) ---
+bot.command('list_track', (ctx) => {
+    const userId = ctx.from.id.toString();
+    if (!isUserApproved(userId)) return ctx.reply("❌ Aap approved nahi hain.");
+    
+    const chatId = ctx.chat.id.toString();
+    if (!activeUsers[chatId] || activeUsers[chatId].length === 0) {
+        return ctx.reply("😴 Koyi active tracking links nahi chal rahe hain.");
+    }
+    
+    let msg = "📋 **Aapke Active Tracking Links:**\n\n";
+    activeUsers[chatId].forEach((item, index) => {
+        msg += `${index + 1}. 🆔 ID: \`${item.id}\` \n🔗 Link: ${item.url}\n\n`;
+    });
+    ctx.reply(msg, { parse_mode: 'Markdown', disable_web_page_preview: true });
+});
+
+// --- COMMAND: STOP ALL (USER & ADMIN) ---
+bot.command('stop_all', (ctx) => {
+    const userId = ctx.from.id.toString();
+    if (!isUserApproved(userId)) return ctx.reply("❌ Aap approved nahi hain.");
+    
     const chatId = ctx.chat.id.toString();
     if (activeUsers[chatId] && activeUsers[chatId].length > 0) {
         activeUsers[chatId].forEach(item => clearInterval(item.interval));
         delete activeUsers[chatId];
-        ctx.reply("🛑 Saari Flipkart tracking band kar di gayi.");
-    } else { ctx.reply("⚠️ Koyi active tracking nahi mili."); }
+        ctx.reply("🛑 Saari active tracking band kar di gayi hain.");
+    } else { 
+        ctx.reply("⚠️ Koyi active tracking nahi mili."); 
+    }
 });
 
+// --- CORE SCRAPER ENGINE ---
 async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
     if (!activeUsers[chatId]) return;
     const itemIndex = activeUsers[chatId].findIndex(item => item.id === pid);
@@ -191,7 +256,9 @@ async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
                 Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_fk_${itemIndex}`)]])
             ).catch(() => {});
         }
-    } catch (e) {}
+    } catch (e) {
+        // Anti-crash background loop protection
+    }
 }
 
-bot.launch().then(() => console.log("Flipkart Approval System Live..."));
+bot.launch().then(() => console.log("Master Control Hybrid Engine Live and Running..."));
