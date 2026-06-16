@@ -3,7 +3,7 @@ const axios = require('axios');
 const express = require('express');
 
 // --- CONFIGURATION ---
-const BOT_TOKEN = '8501862664:AAGI3rJVaW4c9Baud3hXs7WO2Ryi0wuxfjA'; 
+const BOT_TOKEN = '8923597334:AAEm75cG0EbDinDksLc2Dki28EYfjbfS_eQ'; // 🔥 Fresh Token Updated!
 const ADMIN_CHAT_ID = '7485181331'; 
 const CHECK_INTERVAL = 15000; // 15 Seconds loop
 const RENDER_URL = 'https://instamart-tracker-bot.onrender.com/'; 
@@ -74,7 +74,7 @@ bot.command('track_fk', async (ctx) => {
     let fkLink = args.find(arg => arg.includes('flipkart.com/'));
     if (!fkLink) return ctx.reply("❌ Valid Flipkart ya Flipkart Minutes link bhejo bhai!");
     
-    // --- 🚨 HYPERLOCAL MINUTES CHECK ---
+    // --- HYPERLOCAL MINUTES CHECK ---
     if (fkLink.toLowerCase().includes('minutes') || fkLink.toLowerCase().includes('hyperlocal')) {
         awaitingPincode[chatId] = { url: fkLink };
         return ctx.reply("🛵 **Flipkart Minutes Link Detected!**\n\nBhai is area ka **6-digit Pincode** bhejo jahan stock check karna hai:");
@@ -84,17 +84,16 @@ bot.command('track_fk', async (ctx) => {
     processRegularFK(ctx, chatId, fkLink);
 });
 
-// --- 🎯 PINCODE LISTENER FOR MINUTES ENGINE ---
+// --- PINCODE LISTENER FOR MINUTES ENGINE ---
 bot.on('text', async (ctx, next) => {
     const chatId = ctx.chat.id.toString();
     const text = ctx.message.text.trim();
 
     if (awaitingPincode[chatId]) {
-        // Validate if 6 digit number
         if (/^\d{6}$/.test(text)) {
             const fkLink = awaitingPincode[chatId].url;
             const pincode = text;
-            delete awaitingPincode[chatId]; // Clear session state
+            delete awaitingPincode[chatId]; 
 
             let uniqueId = Buffer.from(fkLink + pincode).toString('base64').substring(0, 10);
 
@@ -146,7 +145,7 @@ bot.command('stop_all_fk', (ctx) => {
     } else { ctx.reply("⚠️ Koyi active tracking nahi mili."); }
 });
 
-// --- ⚡ CORE ENGINE: FLIPKART MINUTES LOCALIZED SCRAPER ---
+// --- CORE ENGINE: FLIPKART MINUTES LOCALIZED SCRAPER ---
 async function checkMinutesStock(ctx, chatId, uniqueId, originalUrl, pincode) {
     if (!activeUsers[chatId]) return;
     const itemIndex = activeUsers[chatId].findIndex(item => item.id === uniqueId);
@@ -157,7 +156,7 @@ async function checkMinutesStock(ctx, chatId, uniqueId, originalUrl, pincode) {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-                'Cookie': `pincode=${pincode}; sn=${pincode};` // Injects delivery pincode directly into Flipkart Quick Commerce Session
+                'Cookie': `pincode=${pincode}; sn=${pincode};` 
             },
             timeout: 9000
         });
@@ -165,13 +164,11 @@ async function checkMinutesStock(ctx, chatId, uniqueId, originalUrl, pincode) {
         const html = response.data;
         const lowerHtml = html.toLowerCase();
 
-        // Minutes specific structural markers
         const isSoldOut = lowerHtml.includes('out of stock') || 
                           lowerHtml.includes('currently unavailable') || 
                           lowerHtml.includes('not deliverable') ||
                           lowerHtml.includes('sold out');
 
-        // Minutes engine uses 'ADD' or '+ ADD' style action triggers similar to instamart
         const hasAddTrigger = lowerHtml.includes('add') || lowerHtml.includes('buy now') || html.includes('ADD');
 
         let price = "N/A";
@@ -183,12 +180,10 @@ async function checkMinutesStock(ctx, chatId, uniqueId, originalUrl, pincode) {
                 Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_fk_${itemIndex}`)]])
             ).catch(() => {});
         }
-    } catch (e) {
-        // Safe protection drops
-    }
+    } catch (e) {}
 }
 
-// --- 📦 CORE ENGINE: REGULAR FLIPKART SCRAPER ---
+// --- CORE ENGINE: REGULAR FLIPKART SCRAPER ---
 async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
     if (!activeUsers[chatId]) return;
     const itemIndex = activeUsers[chatId].findIndex(item => item.id === pid);
