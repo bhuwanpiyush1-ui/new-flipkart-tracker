@@ -1,25 +1,60 @@
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 const express = require('express');
+const fs = require('fs'); // 🔥 Filesystem Core (Permanent Storage ke liye)
+const path = require('path');
 
 // --- CONFIGURATION ---
-const BOT_TOKEN = '8923597334:AAEm75cG0EbDinDksLc2Dki28EYfjbfS_eQ'; // Aapka fresh verified token
-const ADMIN_CHAT_ID = '7485181331'; // Admin ID Fixed
-const CHECK_INTERVAL = 15000; // 15 Seconds refresh rate
+const BOT_TOKEN = '8923597334:AAEm75cG0EbDinDksLc2Dki28EYfjbfS_eQ'; 
+const ADMIN_CHAT_ID = '7485181331'; 
+const CHECK_INTERVAL = 15000; 
 const RENDER_URL = 'https://instamart-tracker-bot.onrender.com/'; 
+const DB_FILE = path.join(__dirname, 'database.json');
 // ---------------------
 
 const bot = new Telegraf(BOT_TOKEN);
 const activeUsers = {};
 
-// Safe initial persistent array setup for approvals
-if (!global.fkApprovedList) {
-    global.fkApprovedList = [ADMIN_CHAT_ID.toString()];
+// --- 📂 PERMANENT DATABASE STORAGE LOGIC ---
+function loadApprovedUsers() {
+    try {
+        if (!fs.existsSync(DB_FILE)) {
+            // Agar file nahi hai to Admin ID ke sath fresh banao
+            const initialData = [ADMIN_CHAT_ID.toString()];
+            fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2));
+            return initialData;
+        }
+        const fileContent = fs.readFileSync(DB_FILE, 'utf8');
+        const users = JSON.parse(fileContent);
+        if (!users.includes(ADMIN_CHAT_ID.toString())) {
+            users.push(ADMIN_CHAT_ID.toString());
+        }
+        return users.map(String);
+    } catch (e) {
+        console.log("⚠️ DB Load Error, falling back:", e.message);
+        return [ADMIN_CHAT_ID.toString()];
+    }
 }
+
+function saveApprovedUsers(usersList) {
+    try {
+        const uniqueUsers = [...new Set(usersList.map(String))];
+        fs.writeFileSync(DB_FILE, JSON.stringify(uniqueUsers, null, 2));
+    } catch (e) {
+        console.log("⚠️ DB Save Error:", e.message);
+    }
+}
+
+function isUserApproved(userId) {
+    if (!userId) return false;
+    const currentList = loadApprovedUsers();
+    return currentList.includes(userId.toString());
+}
+// --------------------------------------------
 
 const app = express();
 const PORT = process.env.PORT || 10000;
-app.get('/', (req, res) => res.status(200).send('Master Control Hybrid Engine Live!'));
+app.get('/', (req, res) => res.status(200).send('Permanent Storage Engine Live!'));
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Master Engine Port Binding Successful on ${PORT}`));
 
 // 🔥 ALIVE JHATKA SYSTEM (Bypasses Render Sleep State)
@@ -27,18 +62,12 @@ setInterval(() => {
     axios.get(RENDER_URL).catch(() => {}); 
 }, 30000); 
 
-function isUserApproved(userId) {
-    if (!userId) return false;
-    return global.fkApprovedList.map(String).includes(userId.toString());
-}
-
 // --- CALLBACK BUTTONS HANDLER ---
 bot.on('callback_query', async (ctx) => {
     const data = ctx.callbackQuery.data;
     const chatId = ctx.chat.id.toString();
     const clickerId = ctx.from.id.toString();
     
-    // Stop single track button handler
     if (data.startsWith('stop_fk_')) {
         const index = parseInt(data.split('_')[2]);
         if (activeUsers[chatId] && activeUsers[chatId][index]) {
@@ -51,21 +80,21 @@ bot.on('callback_query', async (ctx) => {
         return ctx.answerCbQuery("⚠️ Already stopped.").catch(() => {});
     }
 
-    // Strict Admin Button Protection
     if (clickerId !== ADMIN_CHAT_ID.toString()) {
         return ctx.answerCbQuery("❌ Unauthorized! Sirf Admin click kar sakta hai.").catch(() => {});
     }
     
-    const targetUserId = data.split('_')[1];
+    const targetUserId = data.split('_')[1].trim();
+    let currentList = loadApprovedUsers();
     
     if (data.startsWith('approve_')) {
-        if (!global.fkApprovedList.map(String).includes(targetUserId.toString())) {
-            global.fkApprovedList.push(targetUserId.toString());
+        if (!currentList.includes(targetUserId)) {
+            currentList.push(targetUserId);
+            saveApprovedUsers(currentList); // Permanent save in file
         }
-        await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n✅ **Status: Approved!**`).catch(() => {});
+        await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n✅ **Status: Approved Permanently!**`).catch(() => {});
         
-        // Classic "Mubarak ho" message
-        await bot.telegram.sendMessage(targetUserId, "🎉 **Mubarak ho! Admin ne aapka access approve kar diya hai!**\n\nAb aap bot ka use kar sakte hain.\n👉 Link track karne ke liye type karne ka format:\n`/start_track <Flipkart_URL>`", { parse_mode: 'Markdown' }).catch(() => {});
+        await bot.telegram.sendMessage(targetUserId, "🎉 **Mubarak ho! Admin ne aapka access approve kar diya hai!**\n\nAb aapka access permanent locked hai.\n👉 Link track karne ke liye format:\n`/start_track <Flipkart_URL>`", { parse_mode: 'Markdown' }).catch(() => {});
     } else if (data.startsWith('decline_')) {
         await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n❌ **Status: Declined!**`).catch(() => {});
         await bot.telegram.sendMessage(targetUserId, "❌ Sorry! Admin ne aapka access request decline kar diya hai.").catch(() => {});
@@ -79,7 +108,7 @@ bot.start((ctx) => {
     const name = `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim() || 'No Name';
     
     if (isUserApproved(userId)) {
-        return ctx.reply(`🤖 *Welcome ${ctx.from.first_name || ''}!* Master Control Tracker Active!\n\n🔹 **User Commands:**\n🚀 \`/start_track <Flipkart_URL>\` — Naya link lagaen\n📋 \`/list_track\` — Chal rahe active links dekhein\n🛑 \`/stop_all\` — Saari tracking band karein\n\n👑 **Admin Special Commands:**\n✅ \`/approve <User_ID>\` — User allowed karein\n📋 \`/list_users\` — Approved users ki list\n❌ \`/remove_user <User_ID>\` — User block karein`, { parse_mode: 'Markdown' });
+        return ctx.reply(`🤖 *Welcome ${ctx.from.first_name || ''}!* Master Control Tracker Active!\n\n🔹 **User Commands:**\n🚀 \`/start_track <Flipkart_URL>\` — Naya link lagaen\n📋 \`/list_track\` — Chal rahe active links dekhein\n🛑 \`/stop_all\` — Saari tracking band karein\n\n👑 **Admin Special Commands:**\n✅ \`/approve <User_ID>\` — User permanent allowed karein\n📋 \`/list_users\` — Approved users ki list\n❌ \`/remove_user <User_ID>\` — User block karein`, { parse_mode: 'Markdown' });
     }
     
     ctx.reply(`🔒 **Access Denied!**\n\nAap abhi approved nahi hain.\nAapki Telegram ID: \`${userId}\`\n\nAdmin ke paas request bhej di gayi hai, kripya wait karein...`);
@@ -105,11 +134,14 @@ bot.command('approve', (ctx) => {
     if (args.length < 2) return ctx.reply("⚠️ Format: `/approve <User_ID>`");
     
     const targetUserId = args[1].trim();
-    if (!global.fkApprovedList.map(String).includes(targetUserId)) {
-        global.fkApprovedList.push(targetUserId);
-        ctx.reply(`✅ User ID \`${targetUserId}\` ko approve kar diya gaya.`);
+    let currentList = loadApprovedUsers();
+
+    if (!currentList.includes(targetUserId)) {
+        currentList.push(targetUserId);
+        saveApprovedUsers(currentList); // Save permanently to disk
+        ctx.reply(`✅ User ID \`${targetUserId}\` ko permanent approve kar diya gaya.`);
         
-        bot.telegram.sendMessage(targetUserId, "🎉 **Mubarak ho! Admin ne aapka access approve kar diya hai!**\n\nAb aap bot ka use kar sakte hain.\n👉 Link track karne ke liye type karne ka format:\n`/start_track <Flipkart_URL>`", { parse_mode: 'Markdown' }).catch(() => {});
+        bot.telegram.sendMessage(targetUserId, "🎉 **Mubarak ho! Admin ne aapka access approve kar diya hai!**\n\nAb aap bot ka use kar sakte hain.\n👉 Link track karne ke liye format:\n`/start_track <Flipkart_URL>`", { parse_mode: 'Markdown' }).catch(() => {});
     } else {
         ctx.reply("⚠️ Yeh user pehle se hi approved hai.");
     }
@@ -118,10 +150,12 @@ bot.command('approve', (ctx) => {
 // --- COMMAND: LIST USERS (ADMIN ONLY) ---
 bot.command('list_users', (ctx) => {
     if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Sirf Admin hi approved users dekh sakta hai!");
-    if (!global.fkApprovedList || global.fkApprovedList.length === 0) return ctx.reply("📋 Koyi approved user nahi hai.");
+    const currentList = loadApprovedUsers();
     
-    let msg = "📋 **Approved Users List:**\n\n";
-    global.fkApprovedList.forEach((user, index) => {
+    if (currentList.length === 0) return ctx.reply("📋 Koyi approved user nahi hai.");
+    
+    let msg = "📋 **Approved Users (Permanent Database):**\n\n";
+    currentList.forEach((user, index) => {
         msg += `${index + 1}. ID: \`${user}\` ${user === ADMIN_CHAT_ID ? '(👑 Admin)' : ''}\n`;
     });
     ctx.reply(msg, { parse_mode: 'Markdown' });
@@ -136,21 +170,22 @@ bot.command('remove_user', (ctx) => {
     const targetUserId = args[1].trim();
     if (targetUserId === ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Bhai khud ko remove nahi kar sakte!");
     
-    const index = global.fkApprovedList.map(String).indexOf(targetUserId);
+    let currentList = loadApprovedUsers();
+    const index = currentList.indexOf(targetUserId);
+
     if (index !== -1) {
-        global.fkApprovedList.splice(index, 1);
-        ctx.reply(`❌ User ID \`${targetUserId}\` ka access block/remove kar diya gaya.`);
+        currentList.splice(index, 1);
+        saveApprovedUsers(currentList); // Update file system data permanently
+        ctx.reply(`❌ User ID \`${targetUserId}\` ka access permanent delete kar diya gaya.`);
         
-        // Notify user about removal
         bot.telegram.sendMessage(targetUserId, "🔒 **Aapka access admin dwara remove kar diya gaya hai.**").catch(() => {});
         
-        // Force stop all active tasks of that removed user
         if (activeUsers[targetUserId]) {
             activeUsers[targetUserId].forEach(item => clearInterval(item.interval));
             delete activeUsers[targetUserId];
         }
     } else {
-        ctx.reply("⚠️ Yeh ID approved list mein nahi mili.");
+        ctx.reply("⚠️ Yeh ID database list mein nahi mili.");
     }
 });
 
@@ -256,9 +291,7 @@ async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
                 Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_fk_${itemIndex}`)]])
             ).catch(() => {});
         }
-    } catch (e) {
-        // Anti-crash background loop protection
-    }
+    } catch (e) {}
 }
 
-bot.launch().then(() => console.log("Master Control Hybrid Engine Live and Running..."));
+bot.launch().then(() => console.log("Master File-DB Engine Live and Running..."));
