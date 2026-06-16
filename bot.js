@@ -4,10 +4,10 @@ const cheerio = require('cheerio');
 const express = require('express');
 
 // --- CONFIGURATION ---
-const BOT_TOKEN = '8923597334:AAE7Hihd_qm3P_mo2t9eHRF9lEKrzIC9DSE'; // Naya Token Locked!
+const BOT_TOKEN = '8923597334:AAE7Hihd_qm3P_mo2t9eHRF9lEKrzIC9DSE'; // New Token Locked!
 const ADMIN_CHAT_ID = '7485181331'; 
 const CHECK_INTERVAL = 15000; // Har 15 Seconds me Stock Check hoga
-const RENDER_URL = 'https://flipkart-stock-bot-new.onrender.com/'; // ⚠️ Render par deploy karne ke baad jo URL milega, wo yahan badal dena bhai!
+const RENDER_URL = 'https://new-flipkart-tracker.onrender.com/'; // 🔥 Aapka Naya Live Link Dynamic Set!
 // ---------------------
 
 const bot = new Telegraf(BOT_TOKEN);
