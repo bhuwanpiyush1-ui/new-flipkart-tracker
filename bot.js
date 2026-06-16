@@ -4,10 +4,10 @@ const cheerio = require('cheerio');
 const express = require('express');
 
 // --- CONFIGURATION ---
-const BOT_TOKEN = '8923597334:AAE7Hihd_qm3P_mo2t9eHRF9lEKrzIC9DSE'; // New Token Locked!
+const BOT_TOKEN = '8923597334:AAE7Hihd_qm3P_mo2t9eHRF9lEKrzIC9DSE'; 
 const ADMIN_CHAT_ID = '7485181331'; 
-const CHECK_INTERVAL = 15000; // Har 15 Seconds me Stock Check hoga
-const RENDER_URL = 'https://new-flipkart-tracker.onrender.com/'; // 🔥 Aapka Naya Live Link Dynamic Set!
+const CHECK_INTERVAL = 15000; // 15 Seconds Stock Check
+const RENDER_URL = 'https://new-flipkart-tracker.onrender.com/'; // Locked!
 // ---------------------
 
 const bot = new Telegraf(BOT_TOKEN);
@@ -21,16 +21,15 @@ const USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0'
 ];
 
+// 🔥 FIXED EXPRESS ENVIRONMENT FOR RENDER PORT BINDING
 const app = express();
-const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('New Flipkart Secure Bot is Live!'));
-app.listen(PORT, () => console.log(`Web server listening on port ${PORT}`));
+const PORT = process.env.PORT || 10000; // Strictly binded to Render's preferred port
+app.get('/', (req, res) => res.status(200).send('Flipkart Engine Online!'));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Strict Port Binding Successful on ${PORT}`));
 
-// 🔥 WATERPROOF SELF-PING (HAR 30 SECOND MEIN SERVER KO JHATKA DEGA TAAKI SOYE NAHI)
+// 🔥 WATERPROOF SELF-PING ENGINE (Clean & Silent)
 setInterval(() => {
-    axios.get(RENDER_URL)
-        .then(() => console.log('⚡ Self-Awake: Flipkart server ko sone nahi diya!'))
-        .catch((err) => console.log('Ping skip, agle 30s loop me check hoga.'));
+    axios.get(RENDER_URL).catch(() => {}); 
 }, 30000); // Strict 30 Seconds!
 
 bot.on('callback_query', async (ctx) => {
@@ -178,7 +177,7 @@ async function checkFlipkartStock(ctx, chatId, targetUrl) {
     const randomAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
     try {
-        const response = await axios.get(targetUrl, { headers: { 'User-Agent': randomAgent, 'Accept-Language': 'en-US,en;q=0.9' }, timeout: 8000 });
+        const response = await axios.get(targetUrl, { headers: { 'User-Agent': randomAgent, 'Accept-Language': 'en-US,en;q=0.9' }, timeout: 10000 });
         const $ = cheerio.load(response.data);
         const pageText = $('body').text().toLowerCase();
         
@@ -191,9 +190,11 @@ async function checkFlipkartStock(ctx, chatId, targetUrl) {
         if (!isOutOfStock && hasBuyButtons) {
             await bot.telegram.sendMessage(chatId, `🚨 STOCK AAGYA 🚨\n\n🔥 bhai flipkart pr stock aagya jaldi lga jake 🔥\n\nLink:\n${targetUrl}`,
                 Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_url_${itemIndex}`)]])
-            ).catch(e => console.log("Speed buffer bypass."));
+            ).catch(() => {});
         }
-    } catch (e) { console.log(`[Flipkart Bot] Error, retrying...`); }
+    } catch (e) {
+        // Silent error filter for high stability
+    }
 }
 
 bot.launch().then(() => console.log("New Flipkart Bot Engine Connected..."));
