@@ -1,7 +1,7 @@
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 const express = require('express');
-const fs = require('fs'); // 🔥 Filesystem Core (Permanent Storage ke liye)
+const fs = require('fs'); // Permanent Storage ke liye
 const path = require('path');
 
 // --- CONFIGURATION ---
@@ -13,6 +13,12 @@ const DB_FILE = path.join(__dirname, 'database.json');
 
 const bot = new Telegraf(BOT_TOKEN);
 const activeUsers = {};
+
+// Helper to escape special MarkdownV2 characters safely
+function escapeMarkdown(text) {
+    if (!text) return '';
+    return String(text).replace(/[_*\[\]()~`>#+\-=|{}.!]/g, '\\$&');
+}
 
 // --- 📂 PERMANENT DATABASE STORAGE LOGIC ---
 function loadApprovedUsers() {
@@ -47,21 +53,28 @@ function isUserApproved(userId) {
 }
 // --------------------------------------------
 
-// --- CALLBACK BUTTONS HANDLER ---
+// --- CALLBACK BUTTONS HANDLER (🔥 MATCHED WITH ALERTS DATA) ---
 bot.on('callback_query', async (ctx) => {
     const data = ctx.callbackQuery.data;
     const chatId = ctx.chat.id.toString();
     
-    if (data.startsWith('stop_fk_')) {
-        const index = parseInt(data.split('_')[2]);
-        if (activeUsers[chatId] && activeUsers[chatId][index]) {
-            const removedItem = activeUsers[chatId][index];
-            clearInterval(removedItem.interval);
-            activeUsers[chatId].splice(index, 1);
-            await ctx.answerCbQuery("Tracking band kar di gayi hai! 🛑").catch(() => {});
-            return ctx.reply(`🛑 Stopped tracking for:\n${removedItem.url}`, { disable_web_page_preview: true });
+    // Matched pattern strings explicitly to handle plain alerts triggers
+    if (data.startsWith('stop_fk_pid_')) {
+        const targetPid = data.split('_')[3];
+        
+        if (activeUsers[chatId] && activeUsers[chatId].length > 0) {
+            const index = activeUsers[chatId].findIndex(item => item.id === targetPid);
+            
+            if (index !== -1) {
+                const removedItem = activeUsers[chatId][index];
+                clearInterval(removedItem.interval);
+                activeUsers[chatId].splice(index, 1);
+                
+                await ctx.answerCbQuery("Tracking band kar di gayi hai! 🛑").catch(() => {});
+                return ctx.reply(`🛑 **Tracking Stopped Permanently\\!**\n\n📦 *Product ID:* \`${escapeMarkdown(targetPid)}\` \n🔗 *Link:* ${removedItem.url}`, { parse_mode: 'Markdown' });
+            }
         }
-        return ctx.answerCbQuery("⚠️ Already stopped.").catch(() => {});
+        return ctx.answerCbQuery("⚠️ Target already stopped or not found.").catch(() => {});
     }
 
     const clickerId = ctx.from.id.toString();
@@ -214,10 +227,16 @@ bot.command('list_track', (ctx) => {
     }
     
     let msg = "📋 **Aapke Active Tracking Links:**\n\n";
+    let inlineButtons = [];
     activeUsers[chatId].forEach((item, index) => {
         msg += `${index + 1}. 🆔 ID: \`${item.id}\` \n🔗 Link: ${item.url}\n\n`;
+        inlineButtons.push([Markup.button.callback(`Stop Item #${index + 1} 🛑`, `stop_fk_pid_${item.id}`)]);
     });
-    ctx.reply(msg, { parse_mode: 'Markdown', disable_web_page_preview: true });
+    ctx.reply(msg, { 
+        parse_mode: 'Markdown', 
+        disable_web_page_preview: true,
+        ...Markup.inlineKeyboard(inlineButtons)
+    });
 });
 
 // --- COMMAND: STOP ALL ---
@@ -235,7 +254,7 @@ bot.command('stop_all', (ctx) => {
     }
 });
 
-// --- 🔬 CORE SCRAPER ENGINE ---
+// --- 🔬 CORE SCRAPER ENGINE (🔥 NON-STOP 15-SEC CONTINUOUS SPAM SPINNER) ---
 async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
     if (!activeUsers[chatId]) return;
     const itemIndex = activeUsers[chatId].findIndex(item => item.id === pid);
@@ -263,11 +282,11 @@ async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
 
         const hasBuyButtons = lowerHtml.includes('buy now') || lowerHtml.includes('add to cart');
 
-        // 🔥 HAR 15 SEC ME TABADTOD NON-STOP SPAM ENGINE
+        // 🔥 Continuous 15-sec intervals alerts fire mapping
         if (!isSoldOut && hasBuyButtons) {
             await bot.telegram.sendMessage(chatId, 
                 `🚨 **FLIPKART STOCK ALERT** 🚨\n\n🔥 bhai product *IN STOCK* aa gaya hai! Dhadadhad order maro! 🔥\n\nLink:\n${originalUrl}`,
-                Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_fk_${itemIndex}`)]])
+                Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_fk_pid_${pid}`)]])
             ).catch(() => {});
         }
     } catch (e) {}
