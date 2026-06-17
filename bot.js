@@ -7,13 +7,13 @@ const path = require('path');
 // --- CONFIGURATION ---
 const BOT_TOKEN = '8923597334:AAEm75cG0EbDinDksLc2Dki28EYfjbfS_eQ'; 
 const ADMIN_CHAT_ID = '7485181331'; 
-const CHECK_INTERVAL = 15000; // Har 15 second ka tabadtod loop
+const CHECK_INTERVAL = 15000; 
 const DB_FILE = path.join(__dirname, 'database.json');
 // ---------------------
 
 const bot = new Telegraf(BOT_TOKEN);
 const activeUsers = {};
-const userSessions = {}; 
+const userSessions = {}; // User ka status check rakhne ke liye
 
 // Helper to escape special MarkdownV2 characters safely
 function escapeMarkdown(text) {
@@ -62,13 +62,13 @@ function isUserApproved(userId) {
 }
 // --------------------------------------------
 
-// --- CALLBACK BUTTONS HANDLER (FIXED CONTROL PANEL) ---
+// --- CALLBACK BUTTONS HANDLER ---
 bot.on('callback_query', async (ctx) => {
     const data = ctx.callbackQuery.data;
     const chatId = ctx.chat.id.toString();
     const clickerId = ctx.from.id.toString();
     
-    // Inline button handles removal via list view or direct text alerts
+    // Handling Inline Dynamic Stop via Buttons
     if (data.startsWith('stop_fk_pid_')) {
         const targetPid = data.split('_')[3];
         
@@ -82,7 +82,7 @@ bot.on('callback_query', async (ctx) => {
                 
                 await ctx.answerCbQuery("Tracking band kar di gayi hai! 🛑").catch(() => {});
                 
-                return ctx.reply(`🛑 **Tracking Stopped Permanently\\!**\n\n📦 *Product ID:* \`${escapeMarkdown(targetPid)}\`\n🔗 *Link:* [Open Flipkart](${removedItem.url})`, { 
+                return ctx.editMessageText(`🛑 **Tracking Stopped Permanently\\!**\n\n📦 *Product ID:* \`${escapeMarkdown(targetPid)}\`\n🔗 *Link:* [Open Flipkart](${removedItem.url})`, { 
                     parse_mode: 'MarkdownV2',
                     disable_web_page_preview: true 
                 }).catch(() => {});
@@ -136,7 +136,7 @@ bot.start((ctx) => {
     ).catch(() => {});
 });
 
-// --- ADMIN COMMANDS ROOM ---
+// --- ADMIN COMMANDS ---
 bot.command('approve', (ctx) => {
     if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Sirf Admin hi approve kar sakta hai!");
     const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
@@ -193,7 +193,7 @@ bot.command('remove_user', (ctx) => {
     }
 });
 
-// --- CORE CONTROL PANEL HEARS MAPPER ---
+// --- CORE PANEL BUTTON INTERFACES ---
 bot.hears('🚀 Start Track', (ctx) => {
     const userId = ctx.from.id.toString();
     if (!isUserApproved(userId)) return;
@@ -284,8 +284,7 @@ async function displayActiveTracks(ctx) {
 
     currentList.forEach((item, index) => {
         msg += `*${index + 1}\\.* 📦 *ID:* \`${escapeMarkdown(item.id)}\` \n🔗 *Link:* [Click Here To Open](${item.url})\n\n`;
-        // Pass dynamic pid string matching callback listener format
-        inlineButtons.push([Markup.button.callback(`Stop Tracking Item #${index + 1} 🛑`, `stop_fk_pid_${item.id}`)]);
+        inlineButtons.push([Markup.button.callback(`Stop Tracking 🛑`, `stop_fk_pid_${item.id}`)]);
     });
     
     await ctx.reply(msg, {
@@ -311,7 +310,7 @@ function killAllOperations(ctx) {
     }
 }
 
-// --- 🔬 CORE SCRAPER ENGINE (🔥 ORGINAL NON-STOP 15-SEC CONTINUOUS SPAM ALERT) ---
+// --- 🔬 CORE SCRAPER ENGINE ---
 async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
     if (!activeUsers[chatId]) return;
     const itemIndex = activeUsers[chatId].findIndex(item => item.id === pid);
@@ -332,19 +331,55 @@ async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
         const html = response.data;
         const lowerHtml = html.toLowerCase();
 
-        // Aapka wahi purana raw text checks jo continuous hitting karta hai
-        const isSoldOut = lowerHtml.includes('this item is currently out of stock') || 
-                          lowerHtml.includes('coming soon') || 
-                          lowerHtml.includes('sold out') ||
-                          lowerHtml.includes('out of stock');
+        let isOutOfStock = false;
+        const jsonLdMatch = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
+        
+        if (jsonLdMatch && jsonLdMatch[1]) {
+            try {
+                const jsonData = JSON.parse(jsonLdMatch[1].trim());
+                const itemData = Array.isArray(jsonData) ? jsonData.find(i => i["@type"] === "Product" || i.offers) : jsonData;
+                if (itemData && itemData.offers) {
+                    const availability = Array.isArray(itemData.offers) ? itemData.offers[0].availability : itemData.offers.availability;
+                    if (availability && String(availability).toLowerCase().includes('outofstock')) {
+                        isOutOfStock = true;
+                    }
+                }
+            } catch (e) {}
+        }
 
+        const hasOutKeywords = lowerHtml.includes('currently out of stock') || 
+                               lowerHtml.includes('coming soon') || 
+                               lowerHtml.includes('sold out') ||
+                               lowerHtml.includes('out of stock');
+
+        const isSoldOut = isOutOfStock || hasOutKeywords;
         const hasBuyButtons = lowerHtml.includes('buy now') || lowerHtml.includes('add to cart');
 
-        // 🔥 PRICE SYSTEM REMOVED PER USER REQUEST TO PREVENT MRP CONFLICTS
+        let price = "N/A";
+        if (jsonLdMatch && jsonLdMatch[1]) {
+            try {
+                const jsonData = JSON.parse(jsonLdMatch[1].trim());
+                const itemData = Array.isArray(jsonData) ? jsonData.find(i => i["@type"] === "Product" || i.offers) : jsonData;
+                if (itemData && itemData.offers) {
+                    let priceVal = Array.isArray(itemData.offers) ? itemData.offers[0].price : itemData.offers.price;
+                    if (priceVal) price = `₹${priceVal}`;
+                }
+            } catch (e) {}
+        }
+        if (price === "N/A") {
+            let priceMatch = html.match(/"price"\s*:\s*"?([0-9]+)"?/i);
+            if (priceMatch) price = `₹${priceMatch[1]}`;
+        }
+
+        // 🔥 FIXED: Ek baar alert bhejte hi tracking automatically KILL ho jayegi!
         if (!isSoldOut && hasBuyButtons) {
+            const removedItem = activeUsers[chatId][itemIndex];
+            clearInterval(removedItem.interval); // background loop closed instantly
+            activeUsers[chatId].splice(itemIndex, 1); // item array se removed
+
             await bot.telegram.sendMessage(chatId, 
-                `🚨 **FLIPKART STOCK ALERT** 🚨\n\n🔥 bhai product *IN STOCK* aa gaya hai! Dhadadhad order maro! 🔥\n\n🔗 **Link:** ${originalUrl}`,
-                {
+                `🚨 **bhai stock aagya hai** 🚨\n\n💰 **Real-Time Price:** *${price}*\n\n🔗 **Link:** ${originalUrl}`,
+                { 
                     parse_mode: 'Markdown',
                     ...Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_fk_pid_${pid}`)]])
                 }
@@ -362,7 +397,6 @@ app.get('/', (req, res) => res.status(200).send('Permanent Storage Panel Engine 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Master Engine Port Binding Successful on ${PORT}`);
     
-    // Alive Keep Loop System
     setInterval(() => {
         const targetUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:' + PORT;
         axios.get(targetUrl).catch(() => {}); 
@@ -372,5 +406,5 @@ app.listen(PORT, '0.0.0.0', () => {
         polling: {
             dropPendingUpdates: true 
         }
-    }).then(() => console.log("Master Panel Non-Stop Loop Live..."));
+    }).then(() => console.log("Master Panel Stock Engine Live..."));
 });
