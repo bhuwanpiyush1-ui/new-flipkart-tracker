@@ -1,7 +1,7 @@
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 const express = require('express');
-const fs = require('fs'); // 🔥 Filesystem Core (Permanent Storage ke liye)
+const fs = require('fs'); // Permanent Storage ke liye
 const path = require('path');
 
 // --- CONFIGURATION ---
@@ -15,11 +15,16 @@ const DB_FILE = path.join(__dirname, 'database.json');
 const bot = new Telegraf(BOT_TOKEN);
 const activeUsers = {};
 
+// Helper to escape special MarkdownV2 characters safely
+function escapeMarkdown(text) {
+    if (!text) return '';
+    return String(text).replace(/[_*\[\]()~`>#+\-=|{}.!]/g, '\\$&');
+}
+
 // --- 📂 PERMANENT DATABASE STORAGE LOGIC ---
 function loadApprovedUsers() {
     try {
         if (!fs.existsSync(DB_FILE)) {
-            // Agar file nahi hai to Admin ID ke sath fresh banao
             const initialData = [ADMIN_CHAT_ID.toString()];
             fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2));
             return initialData;
@@ -31,7 +36,6 @@ function loadApprovedUsers() {
         }
         return users.map(String);
     } catch (e) {
-        console.log("⚠️ DB Load Error, falling back:", e.message);
         return [ADMIN_CHAT_ID.toString()];
     }
 }
@@ -40,9 +44,7 @@ function saveApprovedUsers(usersList) {
     try {
         const uniqueUsers = [...new Set(usersList.map(String))];
         fs.writeFileSync(DB_FILE, JSON.stringify(uniqueUsers, null, 2));
-    } catch (e) {
-        console.log("⚠️ DB Save Error:", e.message);
-    }
+    } catch (e) {}
 }
 
 function isUserApproved(userId) {
@@ -51,16 +53,6 @@ function isUserApproved(userId) {
     return currentList.includes(userId.toString());
 }
 // --------------------------------------------
-
-const app = express();
-const PORT = process.env.PORT || 10000;
-app.get('/', (req, res) => res.status(200).send('Permanent Storage Engine Live!'));
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Master Engine Port Binding Successful on ${PORT}`));
-
-// 🔥 ALIVE JHATKA SYSTEM (Bypasses Render Sleep State)
-setInterval(() => {
-    axios.get(RENDER_URL).catch(() => {}); 
-}, 30000); 
 
 // --- CALLBACK BUTTONS HANDLER ---
 bot.on('callback_query', async (ctx) => {
@@ -90,7 +82,7 @@ bot.on('callback_query', async (ctx) => {
     if (data.startsWith('approve_')) {
         if (!currentList.includes(targetUserId)) {
             currentList.push(targetUserId);
-            saveApprovedUsers(currentList); // Permanent save in file
+            saveApprovedUsers(currentList); 
         }
         await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n✅ **Status: Approved Permanently!**`).catch(() => {});
         
@@ -128,170 +120,3 @@ bot.start((ctx) => {
 });
 
 // --- COMMAND: APPROVE (ADMIN ONLY) ---
-bot.command('approve', (ctx) => {
-    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Sirf Admin hi approve kar sakta hai!");
-    const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
-    if (args.length < 2) return ctx.reply("⚠️ Format: `/approve <User_ID>`");
-    
-    const targetUserId = args[1].trim();
-    let currentList = loadApprovedUsers();
-
-    if (!currentList.includes(targetUserId)) {
-        currentList.push(targetUserId);
-        saveApprovedUsers(currentList); // Save permanently to disk
-        ctx.reply(`✅ User ID \`${targetUserId}\` ko permanent approve kar diya gaya.`);
-        
-        bot.telegram.sendMessage(targetUserId, "🎉 **Mubarak ho! Admin ne aapka access approve kar diya hai!**\n\nAb aap bot ka use kar sakte hain.\n👉 Link track karne ke liye format:\n`/start_track <Flipkart_URL>`", { parse_mode: 'Markdown' }).catch(() => {});
-    } else {
-        ctx.reply("⚠️ Yeh user pehle se hi approved hai.");
-    }
-});
-
-// --- COMMAND: LIST USERS (ADMIN ONLY) ---
-bot.command('list_users', (ctx) => {
-    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Sirf Admin hi approved users dekh sakta hai!");
-    const currentList = loadApprovedUsers();
-    
-    if (currentList.length === 0) return ctx.reply("📋 Koyi approved user nahi hai.");
-    
-    let msg = "📋 **Approved Users (Permanent Database):**\n\n";
-    currentList.forEach((user, index) => {
-        msg += `${index + 1}. ID: \`${user}\` ${user === ADMIN_CHAT_ID ? '(👑 Admin)' : ''}\n`;
-    });
-    ctx.reply(msg, { parse_mode: 'Markdown' });
-});
-
-// --- COMMAND: REMOVE USER (ADMIN ONLY) ---
-bot.command('remove_user', (ctx) => {
-    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Sirf Admin hi user remove kar sakta hai!");
-    const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
-    if (args.length < 2) return ctx.reply("⚠️ Format: `/remove_user <User_ID>`");
-    
-    const targetUserId = args[1].trim();
-    if (targetUserId === ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Bhai khud ko remove nahi kar sakte!");
-    
-    let currentList = loadApprovedUsers();
-    const index = currentList.indexOf(targetUserId);
-
-    if (index !== -1) {
-        currentList.splice(index, 1);
-        saveApprovedUsers(currentList); // Update file system data permanently
-        ctx.reply(`❌ User ID \`${targetUserId}\` ka access permanent delete kar diya gaya.`);
-        
-        bot.telegram.sendMessage(targetUserId, "🔒 **Aapka access admin dwara remove kar diya gaya hai.**").catch(() => {});
-        
-        if (activeUsers[targetUserId]) {
-            activeUsers[targetUserId].forEach(item => clearInterval(item.interval));
-            delete activeUsers[targetUserId];
-        }
-    } else {
-        ctx.reply("⚠️ Yeh ID database list mein nahi mili.");
-    }
-});
-
-// --- COMMAND: START TRACK (USER & ADMIN) ---
-bot.command('start_track', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    if (!isUserApproved(userId)) return ctx.reply("❌ Access Denied! Aap approved nahi hain.");
-    
-    const chatId = ctx.chat.id.toString();
-    const args = ctx.message.text.replace(/\n/g, ' ').split(' ').filter(arg => arg.trim() !== '');
-    
-    let fkLink = args.find(arg => arg.includes('flipkart.com/'));
-    if (!fkLink) return ctx.reply("❌ Sahi Flipkart product link bhejo bhai!");
-    
-    let pid = "";
-    try {
-        const urlObj = new URL(fkLink);
-        pid = urlObj.searchParams.get('pid');
-        if (!pid) {
-            const pidMatch = fkLink.match(/pid=([A-Z0-9]+)/i);
-            if (pidMatch) pid = pidMatch[1];
-        }
-    } catch (e) { pid = ""; }
-
-    if (!pid) {
-        pid = Buffer.from(fkLink).toString('base64').substring(0, 10);
-    }
-
-    if (!activeUsers[chatId]) activeUsers[chatId] = [];
-    if (activeUsers[chatId].some(item => item.id === pid)) return ctx.reply("⚠️ Yeh product pehle se track ho raha hai!");
-    
-    const intervalId = setInterval(() => { checkFlipkartStock(ctx, chatId, pid, fkLink); }, CHECK_INTERVAL);
-    activeUsers[chatId].push({ id: pid, url: fkLink, interval: intervalId });
-    
-    ctx.reply(`🚀 **Flipkart Tracking Active!**\n📦 Product locked successfully.\nStock scanning live...`);
-    checkFlipkartStock(ctx, chatId, pid, fkLink);
-});
-
-// --- COMMAND: LIST TRACK (USER & ADMIN) ---
-bot.command('list_track', (ctx) => {
-    const userId = ctx.from.id.toString();
-    if (!isUserApproved(userId)) return ctx.reply("❌ Aap approved nahi hain.");
-    
-    const chatId = ctx.chat.id.toString();
-    if (!activeUsers[chatId] || activeUsers[chatId].length === 0) {
-        return ctx.reply("😴 Koyi active tracking links nahi chal rahe hain.");
-    }
-    
-    let msg = "📋 **Aapke Active Tracking Links:**\n\n";
-    activeUsers[chatId].forEach((item, index) => {
-        msg += `${index + 1}. 🆔 ID: \`${item.id}\` \n🔗 Link: ${item.url}\n\n`;
-    });
-    ctx.reply(msg, { parse_mode: 'Markdown', disable_web_page_preview: true });
-});
-
-// --- COMMAND: STOP ALL (USER & ADMIN) ---
-bot.command('stop_all', (ctx) => {
-    const userId = ctx.from.id.toString();
-    if (!isUserApproved(userId)) return ctx.reply("❌ Aap approved nahi hain.");
-    
-    const chatId = ctx.chat.id.toString();
-    if (activeUsers[chatId] && activeUsers[chatId].length > 0) {
-        activeUsers[chatId].forEach(item => clearInterval(item.interval));
-        delete activeUsers[chatId];
-        ctx.reply("🛑 Saari active tracking band kar di gayi hain.");
-    } else { 
-        ctx.reply("⚠️ Koyi active tracking nahi mili."); 
-    }
-});
-
-// --- CORE SCRAPER ENGINE ---
-async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
-    if (!activeUsers[chatId]) return;
-    const itemIndex = activeUsers[chatId].findIndex(item => item.id === pid);
-    if (itemIndex === -1) return;
-
-    try {
-        const response = await axios.get(originalUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9'
-            },
-            timeout: 8000
-        });
-
-        const html = response.data;
-        const lowerHtml = html.toLowerCase();
-
-        const isSoldOut = lowerHtml.includes('this item is currently out of stock') || 
-                          lowerHtml.includes('coming soon') || 
-                          lowerHtml.includes('sold out') ||
-                          lowerHtml.includes('out of stock');
-
-        const hasBuyButtons = lowerHtml.includes('buy now') || lowerHtml.includes('add to cart');
-
-        let price = "N/A";
-        let priceMatch = html.match(/₹\s*[0-9,]+/);
-        if (priceMatch) price = priceMatch[0].trim();
-
-        if (!isSoldOut && hasBuyButtons) {
-            await bot.telegram.sendMessage(chatId, `🚨 **FLIPKART STOCK ALERT** 🚨\n\n🔥 bhai product *IN STOCK* aa gaya hai! Dhadadhad order maro! 🔥\n\n💰 **Price:** ${price}\n\nLink:\n${originalUrl}`,
-                Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_fk_${itemIndex}`)]])
-            ).catch(() => {});
-        }
-    } catch (e) {}
-}
-
-bot.launch().then(() => console.log("Master File-DB Engine Live and Running..."));
