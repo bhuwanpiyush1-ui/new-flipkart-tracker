@@ -203,7 +203,6 @@ bot.hears('🚀 Start Track', (ctx) => {
 bot.hears('📋 List Active', (ctx) => { displayActiveTracks(ctx); });
 bot.hears('🛑 Stop All Operations', (ctx) => { killAllOperations(ctx); });
 
-// Fallbacks
 bot.command('start_track', async (ctx) => {
     const userId = ctx.from.id.toString();
     if (!isUserApproved(userId)) return;
@@ -253,6 +252,13 @@ function setupCoreScraperSystem(ctx, fkLink) {
             if (pidMatch) pid = pidMatch[1];
         }
     } catch (e) {}
+
+    // Extract PID directly via basic string if parameters fail
+    if (!pid) {
+        const urlParts = fkLink.split('?')[0].split('/');
+        const dynamicPart = urlParts.find(p => p.toLowerCase().includes('itm'));
+        if (dynamicPart) pid = dynamicPart;
+    }
 
     if (!pid) {
         pid = Buffer.from(fkLink).toString('base64').substring(0, 10);
@@ -310,35 +316,47 @@ function killAllOperations(ctx) {
     }
 }
 
-// --- 🔬 CORE SCRAPER ENGINE (NON-STOP CONTINUOUS LOOP) ---
+// --- 🔬 HIGH-PERFORMANCE ANTI-BLOCK FLIPKART MOBILE APP SCRAPER API ---
 async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
     if (!activeUsers[chatId]) return;
     const itemIndex = activeUsers[chatId].findIndex(item => item.id === pid);
     if (itemIndex === -1) return;
 
     try {
-        const response = await axios.get(originalUrl, {
+        // 🔥 BYPASSING WEB INTERFACE: Hit directly to official open mobile app view endpoint
+        const targetApi = `https://www.flipkart.com/api/3/page/view`;
+        
+        const payload = {
+            "pageUri": originalUrl.replace('https://www.flipkart.com', ''),
+            "context": { "locationContext": { "pincode": "110001" } }
+        };
+
+        const response = await axios.post(targetApi, payload, {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache'
+                'X-User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36 Flipkart/Android/7.55',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'Origin': 'https://www.flipkart.com',
+                'Referer': originalUrl
             },
-            timeout: 10000
+            timeout: 8000
         });
 
-        const html = response.data;
-        const lowerHtml = html.toLowerCase();
+        // Convert backend stringified responses safely to verify status variables
+        const rawJsonData = JSON.stringify(response.data).toLowerCase();
 
-        const isSoldOut = lowerHtml.includes('this item is currently out of stock') || 
-                          lowerHtml.includes('coming soon') || 
-                          lowerHtml.includes('sold out') ||
-                          lowerHtml.includes('out of stock');
+        const isSoldOut = rawJsonData.includes('out_of_stock') || 
+                          rawJsonData.includes('currently out of stock') || 
+                          rawJsonData.includes('sold out') || 
+                          rawJsonData.includes('coming soon');
 
-        const hasBuyButtons = lowerHtml.includes('buy now') || lowerHtml.includes('add to cart');
+        // Check if add to cart or buy now actions are active in application data tree
+        const hasBuyButtons = rawJsonData.includes('add_to_cart') || 
+                               rawJsonData.includes('buy_now') || 
+                               rawJsonData.includes('swatch_selection');
 
-        if (!isSoldOut && hasBuyButtons) {
+        // 🔥 HAR 15 SEC ME TABADTOD LOOP ALERT (NO AUTO-STOP TRIGGER)
+        if (!isSoldOut || hasBuyButtons) {
             await bot.telegram.sendMessage(chatId, 
                 `🚨 **FLIPKART STOCK ALERT** 🚨\n\n🔥 bhai product *IN STOCK* aa gaya hai! Dhadadhad order maro! 🔥\n\n🔗 **Link:** ${originalUrl}`,
                 {
@@ -347,10 +365,31 @@ async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
                 }
             ).catch(() => {});
         }
-    } catch (e) {}
+    } catch (e) {
+        // Fallback Web engine activation if mobile endpoints give structural handshake failures
+        try {
+            const fallbackRes = await axios.get(originalUrl, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+                timeout: 6000
+            });
+            const html = fallbackRes.data.toLowerCase();
+            const webSoldOut = html.includes('out of stock') || html.includes('sold out');
+            const webButtons = html.includes('buy now') || html.includes('add to cart');
+
+            if (!webSoldOut && webButtons) {
+                await bot.telegram.sendMessage(chatId, 
+                    `🚨 **FLIPKART STOCK ALERT** 🚨\n\n🔥 bhai product *IN STOCK* aa gaya hai! Dhadadhad order maro! 🔥\n\n🔗 **Link:** ${originalUrl}`,
+                    {
+                        parse_mode: 'Markdown',
+                        ...Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_fk_pid_${pid}`)]])
+                    }
+                ).catch(() => {});
+            }
+        } catch (err) {}
+    }
 }
 
-// --- 🔥 FIXED EXPRESS INSTANCE & RENDER PORT BINDING ---
+// --- EXPRESS WEB SERVER FOR RENDER PORT BINDING ---
 const app = express();
 const PORT = process.env.PORT || 10000;
 
