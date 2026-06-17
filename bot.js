@@ -68,7 +68,7 @@ bot.on('callback_query', async (ctx) => {
     const chatId = ctx.chat.id.toString();
     const clickerId = ctx.from.id.toString();
     
-    // Handling Inline Dynamic Stop via List Track Cards
+    // Handling Inline Dynamic Stop via List Track Buttons
     if (data.startsWith('stop_fk_pid_')) {
         const targetPid = data.split('_')[3];
         
@@ -112,18 +112,18 @@ bot.on('callback_query', async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
 });
 
-// --- COMMAND: START (REQUEST SYSTEM WITH KEYBOARD MENU) ---
+// --- COMMAND: START ---
 bot.start((ctx) => {
     const userId = ctx.from.id.toString();
     if (isUserApproved(userId)) {
-        delete userSessions[userId]; // State reset
-        return ctx.reply(`🤖 *Welcome ${ctx.from.first_name || ''}!* Secret Control Panel Activated!\n\nNeeche diye gaye buttons par click karke direct use karo boss, ab kuch type karne ka jhanjhat nahi! 😎`, getProKeyboard());
+        delete userSessions[userId]; 
+        return ctx.reply(`🤖 *Welcome ${ctx.from.first_name || ''}!* Secret Control Panel Activated!\n\nNeeche diye gaye buttons par click karke direct use karo boss! 😎`, getProKeyboard());
     }
     
     ctx.reply(`🔒 **Access Denied!**\n\nAap abhi approved nahi hain.\nAapki Telegram ID: \`${userId}\`\n\nAdmin ke paas request bhej di gayi hai, kripya wait karein...`);
     
     bot.telegram.sendMessage(ADMIN_CHAT_ID, 
-        `🚨 **New Access Request!**\n\n👤 Name: ${ctx.from.first_name || ''}\n🆔 ID: \`${userId}\`\n\n👉 Approve karne ke liye niche click karein ya type karein:\n\`/approve ${userId}\``,
+        `🚨 **New Access Request!**\n\n👤 Name: ${ctx.from.first_name || ''}\n🆔 ID: \`${userId}\`\n\n👉 Approve karne ke liye niche click karein:\n\`/approve ${userId}\``,
         {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
@@ -136,7 +136,7 @@ bot.start((ctx) => {
     ).catch(() => {});
 });
 
-// --- HIGH-PRIORITY ADMIN COMMANDS SYSTEM ---
+// --- ADMIN COMMANDS ---
 bot.command('approve', (ctx) => {
     if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Sirf Admin hi approve kar sakta hai!");
     const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
@@ -193,7 +193,7 @@ bot.command('remove_user', (ctx) => {
     }
 });
 
-// --- CORE PANEL BUTTON INTERFACES (HEARS MAPPER) ---
+// --- CORE PANEL BUTTON INTERFACES ---
 bot.hears('🚀 Start Track', (ctx) => {
     const userId = ctx.from.id.toString();
     if (!isUserApproved(userId)) return;
@@ -204,7 +204,6 @@ bot.hears('🚀 Start Track', (ctx) => {
 bot.hears('📋 List Active', (ctx) => { displayActiveTracks(ctx); });
 bot.hears('🛑 Stop All Operations', (ctx) => { killAllOperations(ctx); });
 
-// Fallback legacy command matching structures
 bot.command('start_track', async (ctx) => {
     const userId = ctx.from.id.toString();
     if (!isUserApproved(userId)) return;
@@ -214,7 +213,6 @@ bot.command('start_track', async (ctx) => {
 bot.command('list_track', (ctx) => { displayActiveTracks(ctx); });
 bot.command('stop_all', (ctx) => { killAllOperations(ctx); });
 
-
 // --- 🧠 SMART PANEL TEXT MESSAGES INTERCEPTOR ENGINE ---
 bot.on('text', async (ctx) => {
     const userId = ctx.from.id.toString();
@@ -223,11 +221,9 @@ bot.on('text', async (ctx) => {
 
     const textInput = ctx.message.text.trim();
 
-    // Panel strings ko normal texts me interpret hone se block karo
     if (['🚀 Start Track', '📋 List Active', '🛑 Stop All Operations'].includes(textInput)) return;
     if (textInput.startsWith('/')) return;
 
-    // Awaiting state checks for active link pasting
     if (userSessions[userId] === 'awaiting_link') {
         const args = textInput.replace(/\n/g, ' ').split(' ').filter(arg => arg.trim() !== '');
         let fkLink = args.find(arg => arg.includes('flipkart.com/'));
@@ -237,7 +233,7 @@ bot.on('text', async (ctx) => {
         }
 
         setupCoreScraperSystem(ctx, fkLink);
-        delete userSessions[userId]; // Session clear after tracking deployment
+        delete userSessions[userId]; 
     } else {
         if (textInput.includes('flipkart.com/')) {
             ctx.reply(`💡 **Bhai pehle panel se "🚀 Start Track" select karo, fir link bhejo!**`, getProKeyboard());
@@ -245,10 +241,9 @@ bot.on('text', async (ctx) => {
     }
 });
 
-
-// Core Scraper Link Deployment Wrapper
 function setupCoreScraperSystem(ctx, fkLink) {
     const chatId = ctx.chat.id.toString();
+    const userId = ctx.from.id.toString();
     
     let pid = "";
     try {
@@ -274,7 +269,8 @@ function setupCoreScraperSystem(ctx, fkLink) {
     checkFlipkartStock(ctx, chatId, pid, fkLink);
 }
 
-function displayActiveTracks(ctx) {
+// --- 🔥 FIXED DISPLAY: SINGLE COMPACT MENU WITH INLINE REMOVE BUTTONS ---
+async function displayActiveTracks(ctx) {
     const userId = ctx.from.id.toString();
     const chatId = ctx.chat.id.toString();
     if (!isUserApproved(userId)) return;
@@ -284,20 +280,22 @@ function displayActiveTracks(ctx) {
         return ctx.reply("😴 Koyi active tracking links nahi chal rahe hain.", getProKeyboard());
     }
     
-    ctx.reply("📋 **Radar Par Locked Targets Matrix:**", getProKeyboard());
+    let msg = "📋 *Radar Par Locked Targets Matrix:*\n\n";
+    let inlineButtons = [];
 
-    for (let i = 0; i < currentList.length; i++) {
-        const item = currentList[i];
-        const msg = `*Target #${i + 1}*\n📦 *ID:* \`${escapeMarkdown(item.id)}\`\n🔗 *Link:* [Open Product](${item.url})`;
+    currentList.forEach((item, index) => {
+        msg += `*${index + 1}\\.* 📦 *ID:* \`${escapeMarkdown(item.id)}\` \n🔗 *Link:* [Click Here To Open](${item.url})\n\n`;
         
-        ctx.reply(msg, {
-            parse_mode: 'MarkdownV2',
-            disable_web_page_preview: true,
-            ...Markup.inlineKeyboard([
-                [Markup.button.callback('Stop Tracking 🛑', `stop_fk_pid_${item.id}`)]
-            ])
-        }).catch(() => {});
-    }
+        // Har active item ke liye ek dynamic separate button row banegi
+        inlineButtons.push([Markup.button.callback(`Remove Item #${index + 1} 🛑`, `stop_fk_pid_${item.id}`)]);
+    });
+    
+    // Pura message unke explicit individual buttons ke sath ek hi baar me send hoga
+    await ctx.reply(msg, {
+        parse_mode: 'MarkdownV2',
+        disable_web_page_preview: true,
+        ...Markup.inlineKeyboard(inlineButtons)
+    }).catch(() => {});
 }
 
 function killAllOperations(ctx) {
@@ -391,12 +389,13 @@ async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
 }
 
 // --- EXPRESS WEB SERVER FOR RENDER PORT BINDING ---
-const app = express();
+const app = report => express();
 const PORT = process.env.PORT || 10000;
+const server = express();
 
-app.get('/', (req, res) => res.status(200).send('Permanent Storage Panel Engine Live!'));
+server.get('/', (req, res) => res.status(200).send('Permanent Storage Panel Engine Live!'));
 
-app.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Master Engine Port Binding Successful on ${PORT}`);
     
     setInterval(() => {
