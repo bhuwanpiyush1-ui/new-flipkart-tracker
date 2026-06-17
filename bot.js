@@ -309,7 +309,7 @@ function killAllOperations(ctx) {
     }
 }
 
-// --- 🔬 CORE SCRAPER ENGINE (🔥 DEEP ANTI-BLOCK HEADERS ROTATOR) ---
+// --- 🔬 CORE SCRAPER ENGINE (🔥 UPDATED INTUITIVE STOCK CHECKER) ---
 async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
     if (!activeUsers[chatId]) return;
     const itemIndex = activeUsers[chatId].findIndex(item => item.id === pid);
@@ -338,57 +338,66 @@ async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
         const html = response.data;
         const lowerHtml = html.toLowerCase();
 
-        // Safety Trigger: Agar page captcha par chala gaya toh log me print karega
+        // Safety Trigger: Page robot ya captcha check par chala jaye toh bypass karein
         if (lowerHtml.includes('captcha') || lowerHtml.includes('robot') || html.length < 5000) {
-            console.log(`[SCRAPER WARNING] Blocked by Captcha or Empty Response for PID: ${pid}`);
+            console.log(`[SCRAPER WARNING] Captcha Block or Short Response for PID: ${pid}`);
             return; 
         }
 
-        let isOutOfStock = false;
-        const jsonLdMatch = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
+        let schemaStockStatus = null;
+        let price = "N/A";
         
+        const jsonLdMatch = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
         if (jsonLdMatch && jsonLdMatch[1]) {
             try {
                 const jsonData = JSON.parse(jsonLdMatch[1].trim());
                 const itemData = Array.isArray(jsonData) ? jsonData.find(i => i["@type"] === "Product" || i.offers) : jsonData;
                 if (itemData && itemData.offers) {
                     const availability = Array.isArray(itemData.offers) ? itemData.offers[0].availability : itemData.offers.availability;
-                    if (availability && String(availability).toLowerCase().includes('outofstock')) {
-                        isOutOfStock = true;
+                    if (availability) {
+                        schemaStockStatus = String(availability).toLowerCase(); // Example: "http://schema.org/instock"
                     }
-                }
-            } catch (e) {}
-        }
-
-        const hasOutKeywords = lowerHtml.includes('currently out of stock') || 
-                               lowerHtml.includes('coming soon') || 
-                               lowerHtml.includes('sold out') ||
-                               lowerHtml.includes('out of stock');
-
-        const isSoldOut = isOutOfStock || hasOutKeywords;
-        const hasBuyButtons = lowerHtml.includes('buy now') || lowerHtml.includes('add to cart');
-
-        let price = "N/A";
-        if (jsonLdMatch && jsonLdMatch[1]) {
-            try {
-                const jsonData = JSON.parse(jsonLdMatch[1].trim());
-                const itemData = Array.isArray(jsonData) ? jsonData.find(i => i["@type"] === "Product" || i.offers) : jsonData;
-                if (itemData && itemData.offers) {
                     let priceVal = Array.isArray(itemData.offers) ? itemData.offers[0].price : itemData.offers.price;
                     if (priceVal) price = `₹${priceVal}`;
                 }
             } catch (e) {}
         }
+
+        // Fallback Price Matching
         if (price === "N/A") {
             let priceMatch = html.match(/"price"\s*:\s*"?([0-9]+)"?/i);
             if (priceMatch) price = `₹${priceMatch[1]}`;
         }
 
-        // Trigger and Self-Destruct if product is validated In-Stock
-        if (!isSoldOut && hasBuyButtons) {
+        // --- 🔥 HIGH-PERFORMANCE STOCK DECISION TREE ---
+        let isProductInStock = false;
+
+        if (schemaStockStatus) {
+            // Agar schema ke andar explicit status mil gaya toh buttons par rely karne ki zarurat hi nahi hai
+            if (schemaStockStatus.includes('instock') || schemaStockStatus.includes('preorder')) {
+                isProductInStock = true;
+            } else if (schemaStockStatus.includes('outofstock')) {
+                isProductInStock = false;
+            }
+        } else {
+            // Fallback: Agar schema data na mile toh out-of-stock keywords ki absence aur dynamic textual indicators check karein
+            const hasOutKeywords = lowerHtml.includes('currently out of stock') || 
+                                   lowerHtml.includes('coming soon') || 
+                                   lowerHtml.includes('sold out') ||
+                                   lowerHtml.includes('out of stock');
+                                   
+            const hasBuyActions = lowerHtml.includes('buy now') || lowerHtml.includes('add to cart');
+
+            if (!hasOutKeywords && hasBuyActions) {
+                isProductInStock = true;
+            }
+        }
+
+        // Trigger Alert if product is fully validated to be available
+        if (isProductInStock) {
             const removedItem = activeUsers[chatId][itemIndex];
-            clearInterval(removedItem.interval); 
-            activeUsers[chatId].splice(itemIndex, 1); 
+            clearInterval(removedItem.interval); // Instant background thread drop
+            activeUsers[chatId].splice(itemIndex, 1); // RAM map context dropped
 
             await bot.telegram.sendMessage(chatId, 
                 `🚨 **bhai stock aagya hai** 🚨\n\n💰 **Real-Time Price:** *${price}*\n\n🔗 **Link:** ${originalUrl}`,
@@ -399,7 +408,7 @@ async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
             ).catch(() => {});
         }
     } catch (e) {
-        console.log(`[SCRAPER ERROR] Request failed for PID ${pid}: ${e.message}`);
+        console.log(`[SCRAPER ERROR] Exception for PID ${pid}: ${e.message}`);
     }
 }
 
@@ -421,5 +430,5 @@ app.listen(PORT, '0.0.0.0', () => {
         polling: {
             dropPendingUpdates: true 
         }
-    }).then(() => console.log("Master Panel Stock Engine Live..."));
+    }).then(() => console.log("Master Panel Stock Engine Fully Fixed Live..."));
 });
