@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 // --- 🔒 HARDLOCKED SYSTEM CONFIGURATION ---
-const BOT_TOKEN = '8923597334:AAF_K4fyVa_paCIqhEaoBdb1kgVkWSLON8Y'; // 🔥 APNA NEW FRESH TOKEN HARDCODED
+const BOT_TOKEN = '8923597334:AAF_K4fyVa_paCIqhEaoBdb1kgVkWSLON8Y'; 
 const ADMIN_CHAT_ID = '7485181331'; // Locked on your Master ID
 const CHECK_INTERVAL = 30000; // 30 second precision loop
 const RENDER_URL = 'https://new-flipkart-tracker.onrender.com'; // Modern Live Web URL
@@ -304,7 +304,6 @@ function killAllOperations(ctx) {
     } else { ctx.reply("⚠️ Koyi active operation chal hi nahi rahi."); }
 }
 
-// --- 🔥 UPGRADED ADMIN CONTROL PANEL ENGINE 🔥 ---
 bot.command('approve', (ctx) => {
     if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) {
         return ctx.reply("❌ **Access Denied!** Yeh command sirf asli Admin hi chala sakta hai. 😎");
@@ -322,7 +321,7 @@ bot.command('approve', (ctx) => {
     }
 });
 
-// 🔥 DYNAMIC BUTTON INTERACTIVE USER MANAGEMENT SYSTEM (Strictly locked to your Admin ID)
+// 🔥 FIXED: Syntax locha completely resolved on line 342
 bot.command('manage_users', (ctx) => {
     if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) {
         return ctx.reply("❌ **Access Denied!** Yeh command sirf asli Admin hi chala sakta hai. 😎");
@@ -339,7 +338,7 @@ bot.command('manage_users', (ctx) => {
     
     rawUsers.forEach((u, i) => {
         msg += `${i + 1}. 🆔 User ID: <code>${u}</code>\n`;
-        keyboardButtons.push([Markup.button.callback+`Remove User ${u} ❌`, `remusr_${u}`)]);
+        keyboardButtons.push([Markup.button.callback(`Remove User ${u} ❌`, `remusr_${u}`)]);
     });
     
     ctx.reply(msg, {
@@ -460,7 +459,7 @@ async function checkFinancialFluctuations(ctx, chatId, pid, originalUrl, mode) {
             let addedOffers = currentOffersRaw.filter(x => !instance.lastOffersRaw.includes(x));
             let removedOffers = instance.lastOffersRaw.filter(x => !currentOffersRaw.includes(x));
 
-            let offerChangeMsg = `💳 <b>BANK OFFER TEXT/VALUE CHANGED:</b>\n`;
+            let offerChangeMsg = `CNB <b>BANK OFFER TEXT/VALUE CHANGED:</b>\n`;
             if (addedOffers.length > 0) {
                 offerChangeMsg += `✅ <b>Naya Offer Add Hua:</b>\n${addedOffers.map(o => `👉 ${o}`).join('\n')}\n`;
             }
