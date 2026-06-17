@@ -1,11 +1,11 @@
 const { Telegraf, Markup } = require('telegraf');
-const axios = require('axios'); // Core Scraper Connected Clean
+const axios = require('axios');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
 
-// --- 🔒 FINAL HARDLOCKED CONFIGURATION ---
-const BOT_TOKEN = '8980239383:AAFwZVEzP0lTYoIG3-HYig4xTz47L1n0lXY'; 
+// --- 🔒 HARDLOCKED SYSTEM CONFIGURATION ---
+const BOT_TOKEN = '8923597334:AAF_K4fyVa_paCIqhEaoBdb1kgVkWSLON8Y'; // 🔥 APNA NEW FRESH TOKEN HARDCODED
 const ADMIN_CHAT_ID = '7485181331'; // Locked on your Master ID
 const CHECK_INTERVAL = 30000; // 30 second precision loop
 const RENDER_URL = 'https://new-flipkart-tracker.onrender.com'; // Modern Live Web URL
@@ -304,7 +304,7 @@ function killAllOperations(ctx) {
     } else { ctx.reply("⚠️ Koyi active operation chal hi nahi rahi."); }
 }
 
-// --- 🔥 ADMIN CONTROL PANEL ENGINE 🔥 ---
+// --- 🔥 UPGRADED ADMIN CONTROL PANEL ENGINE 🔥 ---
 bot.command('approve', (ctx) => {
     if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) {
         return ctx.reply("❌ **Access Denied!** Yeh command sirf asli Admin hi chala sakta hai. 😎");
@@ -339,7 +339,7 @@ bot.command('manage_users', (ctx) => {
     
     rawUsers.forEach((u, i) => {
         msg += `${i + 1}. 🆔 User ID: <code>${u}</code>\n`;
-        keyboardButtons.push([Markup.button.callback(`Remove User ${u} ❌`, `remusr_${u}`)]);
+        keyboardButtons.push([Markup.button.callback+`Remove User ${u} ❌`, `remusr_${u}`)]);
     });
     
     ctx.reply(msg, {
