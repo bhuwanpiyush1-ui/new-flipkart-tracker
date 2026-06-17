@@ -4,9 +4,9 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 
-// --- 🔒 HARDLOCKED PARSON WALA STABLE CONFIG ---
+// --- 🔒 STRICT HARDLOCKED STABLE CONFIG ---
 const BOT_TOKEN = '8923597334:AAF_K4fyVa_paCIqhEaoBdb1kgVkWSLON8Y'; 
-const ADMIN_CHAT_ID = '7485181331'; // Master ID Locked
+const ADMIN_CHAT_ID = '7485181331'; // Locked on your Master ID
 const CHECK_INTERVAL = 15000; // 🔥 STRICT 15-SECOND SPEED LOOP
 const RENDER_URL = 'https://new-flipkart-tracker.onrender.com'; 
 const DB_FILE = path.join(__dirname, 'database.json');
@@ -233,7 +233,6 @@ function setupCoreScraperSystem(ctx, fkLink, mode, modeLabel) {
     if (!activeUsers[chatId]) activeUsers[chatId] = [];
     if (activeUsers[chatId].some(item => item.id === pid)) return ctx.reply("⚠️ Abe ye target pehle se hi radar par locked hai!");
 
-    // 🔥 PARSON WALA EXACT CORE 15-SEC SNAPSHOT RADAR LOOPS
     const intervalId = setInterval(() => { checkPageBodyFluctuations(ctx, chatId, pid, fkLink); }, CHECK_INTERVAL);
 
     activeUsers[chatId].push({
@@ -362,7 +361,7 @@ bot.command('remove_user', (ctx) => {
     }
 });
 
-// --- 🔬 🔥 PARSON WALA EXACT SUPER-FAST SCRAPER ENGINE 🔥 🔬 ---
+// --- 🔬 🔥 CORE 15-SEC SNAPSHOT PARSER ENGINE 🔥 🔬 ---
 async function checkPageBodyFluctuations(ctx, chatId, pid, originalUrl) {
     if (!activeUsers[chatId]) return;
     const itemIndex = activeUsers[chatId].findIndex(item => item.id === pid);
@@ -380,23 +379,20 @@ async function checkPageBodyFluctuations(ctx, chatId, pid, originalUrl) {
         });
 
         const htmlBody = String(response.data);
-        const currentBodyLength = htmlBody.length; // Pure String Length Tracking
+        const currentBodyLength = htmlBody.length; 
 
         let instance = activeUsers[chatId][itemIndex];
 
-        // First Loop Session Sync
         if (instance.lastBodyLength === null) {
             instance.lastBodyLength = currentBodyLength;
             return;
         }
 
-        // 🔥 HARD CHECK: Agar page ka size badla (matlab Price/Offer change ya stock status up-down hua)
-        // Kuch elements dynamic badalte hain isliye length mein +/- 15 characters ka safe margin lagaya hai
+        // 15 characters ke safe structural filter margin se upar change hote hi alert blast
         if (Math.abs(currentBodyLength - instance.lastBodyLength) > 15) {
             instance.lastBodyLength = currentBodyLength;
             instance.alertFired = true;
 
-            // Instant Blast 15-Sec Alert Trigger!
             await bot.telegram.sendMessage(chatId, 
                 `🔥 <b>LOOT ALERT: FLIPKART WAALON NE PAGE BADAL DIYA!!</b> 🔥\n\n📦 <b>Product ID:</b> <code>${pid}</code>\n⚡ <b>Status:</b> 🟢 <b>FLUCTUATION DETECTED IN 15 SECONDS!</b>\n\nBhai jaldi jaakar link check karo, price drop hua hai ya bank offer ya stock badla hai! 💻💣\n\n🔗 <b>Product Link:</b> ${originalUrl}`,
                 {
@@ -405,14 +401,13 @@ async function checkPageBodyFluctuations(ctx, chatId, pid, originalUrl) {
                 }
             ).catch(() => {});
 
-            // Auto stop after alert to avoid spam loops
             clearInterval(instance.interval);
         }
 
     } catch (err) {}
 }
 
-// FORCE FLUSH TO CLEAR DEPLOY CONFLICTS ON BOOT ENGINE
+// FORCE FLUSH ENGINE TO WIPE OUT OVERLAPPING SESSIONS
 bot.telegram.deleteWebhook().then(() => {
     bot.launch().then(() => console.log("Parson Wala 15-Sec HTML Scraper Engine Live..."));
 });
