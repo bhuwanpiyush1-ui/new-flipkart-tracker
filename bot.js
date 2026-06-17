@@ -1,22 +1,22 @@
 const { Telegraf, Markup } = require('telegraf');
-const axios = require('axios');
+const axios = require('axios'); // Core Scraper Connected Clean
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
 
-// --- CONFIGURATION ---
+// --- 🔒 FINAL HARDLOCKED CONFIGURATION ---
 const BOT_TOKEN = '8980239383:AAFwZVEzP0lTYoIG3-HYig4xTz47L1n0lXY'; 
-const ADMIN_CHAT_ID = '7485181331'; 
-const CHECK_INTERVAL = 30000; // 30 second loop
-const RENDER_URL = 'https://fk-financial-tracker.onrender.com'; // Locked Live URL
+const ADMIN_CHAT_ID = '7485181331'; // Locked on your Master ID
+const CHECK_INTERVAL = 30000; // 30 second precision loop
+const RENDER_URL = 'https://new-flipkart-tracker.onrender.com'; // Modern Live Web URL
 const DB_FILE = path.join(__dirname, 'database.json');
-// ---------------------
+// ----------------------------------------
 
 const bot = new Telegraf(BOT_TOKEN);
 const activeUsers = {};
 const userSessions = {}; // Handles user tracking state silently
 
-// HARD ENGINE CACHE: Prevents file lock crashes
+// HARD ENGINE CACHE: Baar-baar file read crash se bachane ke liye
 let approvedUsersCache = [];
 
 // --- 📂 BULLET-PROOF DATABASE LOGIC ---
@@ -47,7 +47,7 @@ function initDatabase() {
     }
 }
 
-// Initialize database cache instantly
+// Boot cache immediately
 initDatabase();
 
 function saveApprovedUsers(usersList) {
@@ -106,7 +106,7 @@ bot.on('callback_query', async (ctx) => {
         return ctx.answerCbQuery("⚠️ Yeh target pehle se hi band ho chuka hai.").catch(() => {});
     }
 
-    // Interactive Inline Button for Removing Users
+    // Interactive Inline Button for Removing Users (Strict Admin Lock)
     if (data.startsWith('remusr_')) {
         if (clickerId !== ADMIN_CHAT_ID.toString()) return ctx.answerCbQuery("❌ Unauthorized!").catch(() => {});
         const targetUserId = data.split('_')[1].trim();
@@ -304,6 +304,7 @@ function killAllOperations(ctx) {
     } else { ctx.reply("⚠️ Koyi active operation chal hi nahi rahi."); }
 }
 
+// --- 🔥 ADMIN CONTROL PANEL ENGINE 🔥 ---
 bot.command('approve', (ctx) => {
     if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) {
         return ctx.reply("❌ **Access Denied!** Yeh command sirf asli Admin hi chala sakta hai. 😎");
@@ -321,7 +322,7 @@ bot.command('approve', (ctx) => {
     }
 });
 
-// 🔥 INTERACTIVE USER MANAGEMENT PANEL
+// 🔥 DYNAMIC BUTTON INTERACTIVE USER MANAGEMENT SYSTEM (Strictly locked to your Admin ID)
 bot.command('manage_users', (ctx) => {
     if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) {
         return ctx.reply("❌ **Access Denied!** Yeh command sirf asli Admin hi chala sakta hai. 😎");
@@ -496,7 +497,7 @@ async function checkFinancialFluctuations(ctx, chatId, pid, originalUrl, mode) {
     } catch (err) {}
 }
 
-// FORCE FLUSH TO CLEAR DEPLOY CONFLICTS
+// FORCE FLUSH TO CLEAR DEPLOY CONFLICTS ON BOOT ENGINE
 bot.telegram.deleteWebhook().then(() => {
     bot.launch().then(() => console.log("Spy Control Pro Stable Layout Live..."));
 });
