@@ -8,7 +8,6 @@ const path = require('path');
 const BOT_TOKEN = '8923597334:AAEm75cG0EbDinDksLc2Dki28EYfjbfS_eQ'; 
 const ADMIN_CHAT_ID = '7485181331'; 
 const CHECK_INTERVAL = 15000; 
-const RENDER_URL = 'https://instamart-tracker-bot.onrender.com/'; 
 const DB_FILE = path.join(__dirname, 'database.json');
 // ---------------------
 
@@ -120,3 +119,233 @@ bot.start((ctx) => {
 });
 
 // --- COMMAND: APPROVE (ADMIN ONLY) ---
+bot.command('approve', (ctx) => {
+    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Sirf Admin hi approve kar sakta hai!");
+    const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
+    if (args.length < 2) return ctx.reply("⚠️ Format: `/approve <User_ID>`");
+    
+    const targetUserId = args[1].trim();
+    let currentList = loadApprovedUsers();
+
+    if (!currentList.includes(targetUserId)) {
+        currentList.push(targetUserId);
+        saveApprovedUsers(currentList); 
+        ctx.reply(`✅ User ID \`${targetUserId}\` ko permanent approve kar diya gaya.`);
+        
+        bot.telegram.sendMessage(targetUserId, "🎉 **Mubarak ho! Admin ne aapka access approve kar diya hai!**\n\nAb aap bot ka use kar sakte hain.\n👉 Link track karne ke liye format:\n`/start_track <Flipkart_URL>`", { parse_mode: 'Markdown' }).catch(() => {});
+    } else {
+        ctx.reply("⚠️ Yeh user pehle se hi approved hai.");
+    }
+});
+
+// --- COMMAND: LIST USERS (ADMIN ONLY) ---
+bot.command('list_users', (ctx) => {
+    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Sirf Admin hi approved users dekh sakta hai!");
+    const currentList = loadApprovedUsers();
+    
+    if (currentList.length === 0) return ctx.reply("📋 Koyi approved user nahi hai.");
+    
+    let msg = "📋 **Approved Users (Permanent Database):**\n\n";
+    currentList.forEach((user, index) => {
+        msg += `${index + 1}. ID: \`${user}\` ${user === ADMIN_CHAT_ID ? '(👑 Admin)' : ''}\n`;
+    });
+    ctx.reply(msg, { parse_mode: 'Markdown' });
+});
+
+// --- COMMAND: REMOVE USER (ADMIN ONLY) ---
+bot.command('remove_user', (ctx) => {
+    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Sirf Admin hi user remove kar sakta hai!");
+    const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
+    if (args.length < 2) return ctx.reply("⚠️ Format: `/remove_user <User_ID>`");
+    
+    const targetUserId = args[1].trim();
+    if (targetUserId === ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Bhai khud ko remove nahi kar sakte!");
+    
+    let currentList = loadApprovedUsers();
+    const index = currentList.indexOf(targetUserId);
+
+    if (index !== -1) {
+        currentList.splice(index, 1);
+        saveApprovedUsers(currentList); 
+        ctx.reply(`❌ User ID \`${targetUserId}\` ka access permanent delete kar diya gaya.`);
+        
+        bot.telegram.sendMessage(targetUserId, "🔒 **Aapka access admin dwara remove kar diya gaya hai.**").catch(() => {});
+        
+        if (activeUsers[targetUserId]) {
+            activeUsers[targetUserId].forEach(item => clearInterval(item.interval));
+            delete activeUsers[targetUserId];
+        }
+    } else {
+        ctx.reply("⚠️ Yeh ID database list mein nahi mili.");
+    }
+});
+
+// --- COMMAND: START TRACK (USER & ADMIN) ---
+bot.command('start_track', async (ctx) => {
+    const userId = ctx.from.id.toString();
+    if (!isUserApproved(userId)) return ctx.reply("❌ Access Denied! Aap approved nahi hain.");
+    
+    const chatId = ctx.chat.id.toString();
+    const args = ctx.message.text.replace(/\n/g, ' ').split(' ').filter(arg => arg.trim() !== '');
+    
+    let fkLink = args.find(arg => arg.includes('flipkart.com/'));
+    if (!fkLink) return ctx.reply("❌ Sahi Flipkart product link bhejo bhai!");
+    
+    let pid = "";
+    try {
+        const urlObj = new URL(fkLink);
+        pid = urlObj.searchParams.get('pid');
+        if (!pid) {
+            const pidMatch = fkLink.match(/pid=([A-Z0-9]+)/i);
+            if (pidMatch) pid = pidMatch[1];
+        }
+    } catch (e) { pid = ""; }
+
+    if (!pid) {
+        pid = Buffer.from(fkLink).toString('base64').substring(0, 10);
+    }
+
+    if (!activeUsers[chatId]) activeUsers[chatId] = [];
+    if (activeUsers[chatId].some(item => item.id === pid)) return ctx.reply("⚠️ Yeh product pehle se track ho raha hai!");
+    
+    const intervalId = setInterval(() => { checkFlipkartStock(ctx, chatId, pid, fkLink); }, CHECK_INTERVAL);
+    activeUsers[chatId].push({ id: pid, url: fkLink, interval: intervalId });
+    
+    ctx.reply(`🚀 **Flipkart Tracking Active!**\n📦 Product locked successfully.\nStock scanning live...`);
+    checkFlipkartStock(ctx, chatId, pid, fkLink);
+});
+
+// --- COMMAND: LIST TRACK (USER & ADMIN) ---
+function displayActiveTracks(ctx) {
+    const userId = ctx.from.id.toString();
+    const chatId = ctx.chat.id.toString();
+    if (!isUserApproved(userId)) return ctx.reply("❌ Aap approved nahi hain.");
+    
+    const currentList = activeUsers[chatId] || activeUsers[userId] || [];
+    if (currentList.length === 0) {
+        return ctx.reply("😴 Koyi active tracking links nahi chal rahe hain.");
+    }
+    
+    let msg = "📋 *Aapke Active Tracking Links:*\n\n";
+    currentList.forEach((item, index) => {
+        msg += `*${index + 1}\\.* 📦 *ID:* \`${escapeMarkdown(item.id)}\` \n🔗 *Link:* [Click Here To Open](${item.url})\n\n`;
+    });
+    ctx.reply(msg, { parse_mode: 'MarkdownV2', disable_web_page_preview: true });
+}
+
+bot.command('list_track', (ctx) => { displayActiveTracks(ctx); });
+
+// --- COMMAND: STOP ALL (USER & ADMIN) ---
+bot.command('stop_all', (ctx) => {
+    const userId = ctx.from.id.toString();
+    const chatId = ctx.chat.id.toString();
+    if (!isUserApproved(userId)) return ctx.reply("❌ Aap approved nahi hain.");
+    
+    const targets = activeUsers[chatId] || activeUsers[userId] || [];
+    if (targets.length > 0) {
+        targets.forEach(item => clearInterval(item.interval));
+        delete activeUsers[chatId];
+        delete activeUsers[userId];
+        ctx.reply("🛑 Saari active tracking band kar di gayi hain.");
+    } else { 
+        ctx.reply("⚠️ Koyi active tracking nahi mili."); 
+    }
+});
+
+// --- CORE SCRAPER ENGINE ---
+async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
+    if (!activeUsers[chatId]) return;
+    const itemIndex = activeUsers[chatId].findIndex(item => item.id === pid);
+    if (itemIndex === -1) return;
+
+    try {
+        const response = await axios.get(originalUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            },
+            timeout: 10000
+        });
+
+        const html = response.data;
+        const lowerHtml = html.toLowerCase();
+
+        let isOutOfStock = false;
+        const jsonLdMatch = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
+        
+        if (jsonLdMatch && jsonLdMatch[1]) {
+            try {
+                const jsonData = JSON.parse(jsonLdMatch[1].trim());
+                const itemData = Array.isArray(jsonData) ? jsonData.find(i => i["@type"] === "Product" || i.offers) : jsonData;
+                if (itemData && itemData.offers) {
+                    const availability = Array.isArray(itemData.offers) ? itemData.offers[0].availability : itemData.offers.availability;
+                    if (availability && String(availability).toLowerCase().includes('outofstock')) {
+                        isOutOfStock = true;
+                    }
+                }
+            } catch (e) {}
+        }
+
+        const hasOutKeywords = lowerHtml.includes('currently out of stock') || 
+                               lowerHtml.includes('coming soon') || 
+                               lowerHtml.includes('sold out') ||
+                               lowerHtml.includes('out of stock');
+
+        const isSoldOut = isOutOfStock || hasOutKeywords;
+        const hasBuyButtons = lowerHtml.includes('buy now') || lowerHtml.includes('add to cart');
+
+        let price = "N/A";
+        if (jsonLdMatch && jsonLdMatch[1]) {
+            try {
+                const jsonData = JSON.parse(jsonLdMatch[1].trim());
+                const itemData = Array.isArray(jsonData) ? jsonData.find(i => i["@type"] === "Product" || i.offers) : jsonData;
+                if (itemData && itemData.offers) {
+                    let priceVal = Array.isArray(itemData.offers) ? itemData.offers[0].price : itemData.offers.price;
+                    if (priceVal) price = `₹${priceVal}`;
+                }
+            } catch (e) {}
+        }
+        if (price === "N/A") {
+            let priceMatch = html.match(/"price"\s*:\s*"?([0-9]+)"?/i);
+            if (priceMatch) price = `₹${priceMatch[1]}`;
+        }
+
+        if (!isSoldOut && hasBuyButtons) {
+            const removedItem = activeUsers[chatId][itemIndex];
+            clearInterval(removedItem.interval);
+            activeUsers[chatId].splice(itemIndex, 1);
+
+            await bot.telegram.sendMessage(chatId, 
+                `🚨 **FLIPKART STOCK ALERT** 🚨\n\n🔥 *bhai product IN STOCK aa gaya hai! Dhadadhad order maro!* 🔥\n\n💰 **Real-Time Price:** *${price}*\n\n🔗 **Link:** ${originalUrl}`,
+                { parse_mode: 'Markdown' }
+            ).catch(() => {});
+        }
+    } catch (e) {}
+}
+
+// --- 🔥 EXPRESS EXPLICIT WEB SERVER WITH LOCAL ENVIROMENT HOOK ---
+const app = express();
+const PORT = process.env.PORT || 10000;
+
+app.get('/', (req, res) => res.status(200).send('Permanent Storage Engine Live!'));
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Master Engine Port Binding Successful on ${PORT}`);
+    
+    // Automatic Dynamic Self-Ping System (No hardcoded URL dependencies)
+    setInterval(() => {
+        // Agar dynamic link na mile toh fallback router run hoga binna code crash kiye
+        const targetUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:' + PORT;
+        axios.get(targetUrl).catch(() => {}); 
+    }, 30000); 
+
+    // Bot polling launching safely after ports verification
+    bot.launch({
+        polling: {
+            dropPendingUpdates: true 
+        }
+    }).then(() => console.log("Master File-DB Engine Live and Running..."));
+});
