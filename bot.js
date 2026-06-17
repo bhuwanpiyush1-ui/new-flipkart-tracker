@@ -68,7 +68,7 @@ bot.on('callback_query', async (ctx) => {
     const chatId = ctx.chat.id.toString();
     const clickerId = ctx.from.id.toString();
     
-    // Handling Inline Dynamic Stop via List Track Buttons
+    // Handling Inline Dynamic Stop via Buttons
     if (data.startsWith('stop_fk_pid_')) {
         const targetPid = data.split('_')[3];
         
@@ -213,7 +213,7 @@ bot.command('start_track', async (ctx) => {
 bot.command('list_track', (ctx) => { displayActiveTracks(ctx); });
 bot.command('stop_all', (ctx) => { killAllOperations(ctx); });
 
-// --- 🧠 SMART PANEL TEXT MESSAGES INTERCEPTOR ENGINE ---
+// --- SMART PANEL TEXT MESSAGES INTERCEPTOR ENGINE ---
 bot.on('text', async (ctx) => {
     const userId = ctx.from.id.toString();
     const chatId = ctx.chat.id.toString();
@@ -243,7 +243,6 @@ bot.on('text', async (ctx) => {
 
 function setupCoreScraperSystem(ctx, fkLink) {
     const chatId = ctx.chat.id.toString();
-    const userId = ctx.from.id.toString();
     
     let pid = "";
     try {
@@ -269,7 +268,7 @@ function setupCoreScraperSystem(ctx, fkLink) {
     checkFlipkartStock(ctx, chatId, pid, fkLink);
 }
 
-// --- 🔥 FIXED DISPLAY: SINGLE COMPACT MENU WITH INLINE REMOVE BUTTONS ---
+// --- FIXED DISPLAY MENU ---
 async function displayActiveTracks(ctx) {
     const userId = ctx.from.id.toString();
     const chatId = ctx.chat.id.toString();
@@ -285,12 +284,9 @@ async function displayActiveTracks(ctx) {
 
     currentList.forEach((item, index) => {
         msg += `*${index + 1}\\.* 📦 *ID:* \`${escapeMarkdown(item.id)}\` \n🔗 *Link:* [Click Here To Open](${item.url})\n\n`;
-        
-        // Har active item ke liye ek dynamic separate button row banegi
-        inlineButtons.push([Markup.button.callback(`Remove Item #${index + 1} 🛑`, `stop_fk_pid_${item.id}`)]);
+        inlineButtons.push([Markup.button.callback(`Stop Tracking 🛑`, `stop_fk_pid_${item.id}`)]);
     });
     
-    // Pura message unke explicit individual buttons ke sath ek hi baar me send hoga
     await ctx.reply(msg, {
         parse_mode: 'MarkdownV2',
         disable_web_page_preview: true,
@@ -308,13 +304,13 @@ function killAllOperations(ctx) {
         targets.forEach(item => clearInterval(item.interval));
         delete activeUsers[chatId];
         delete activeUsers[userId];
-        ctx.reply("🛑 Saari active tracking band kar di gayi hain.", getProKeyboard());
+        ctx.reply("🛑 Saare undercover agents ko headquarter wapas bula liya gya hai! Matrix cleared.", getProKeyboard());
     } else { 
         ctx.reply("⚠️ Koyi active tracking nahi mili.", getProKeyboard()); 
     }
 }
 
-// --- 🔬 CORE BREAKDOWN SCRAPER ENGINE ---
+// --- 🔬 CORE SCRAPER ENGINE ---
 async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
     if (!activeUsers[chatId]) return;
     const itemIndex = activeUsers[chatId].findIndex(item => item.id === pid);
@@ -375,27 +371,30 @@ async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
             if (priceMatch) price = `₹${priceMatch[1]}`;
         }
 
+        // 🔥 FIXED: Ek baar alert bhejte hi tracking automatically KILL ho jayegi!
         if (!isSoldOut && hasBuyButtons) {
             const removedItem = activeUsers[chatId][itemIndex];
-            clearInterval(removedItem.interval);
-            activeUsers[chatId].splice(itemIndex, 1);
+            clearInterval(removedItem.interval); // background loop closed instantly
+            activeUsers[chatId].splice(itemIndex, 1); // item array se removed
 
             await bot.telegram.sendMessage(chatId, 
-                `🚨 **FLIPKART STOCK ALERT** 🚨\n\n🔥 *bhai product IN STOCK aa gaya hai! Dhadadhad order maro!* 🔥\n\n💰 **Real-Time Price:** *${price}*\n\n🔗 **Link:** ${originalUrl}`,
-                getProKeyboard()
+                `🚨 **bhai stock aagya hai** 🚨\n\n💰 **Real-Time Price:** *${price}*\n\n🔗 **Link:** ${originalUrl}`,
+                { 
+                    parse_mode: 'Markdown',
+                    ...Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_fk_pid_${pid}`)]])
+                }
             ).catch(() => {});
         }
     } catch (e) {}
 }
 
 // --- EXPRESS WEB SERVER FOR RENDER PORT BINDING ---
-const app = report => express();
+const app = express();
 const PORT = process.env.PORT || 10000;
-const server = express();
 
-server.get('/', (req, res) => res.status(200).send('Permanent Storage Panel Engine Live!'));
+app.get('/', (req, res) => res.status(200).send('Permanent Storage Panel Engine Live!'));
 
-server.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Master Engine Port Binding Successful on ${PORT}`);
     
     setInterval(() => {
@@ -407,5 +406,5 @@ server.listen(PORT, '0.0.0.0', () => {
         polling: {
             dropPendingUpdates: true 
         }
-    }).then(() => console.log("Master Panel Engine Live and Running..."));
+    }).then(() => console.log("Master Panel Stock Engine Live..."));
 });
