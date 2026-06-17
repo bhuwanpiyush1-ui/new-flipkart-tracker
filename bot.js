@@ -13,7 +13,7 @@ const DB_FILE = path.join(__dirname, 'database.json');
 
 const bot = new Telegraf(BOT_TOKEN);
 const activeUsers = {};
-const userSessions = {}; // User ka status check rakhne ke liye
+const userSessions = {}; 
 
 // Helper to escape special MarkdownV2 characters safely
 function escapeMarkdown(text) {
@@ -68,7 +68,6 @@ bot.on('callback_query', async (ctx) => {
     const chatId = ctx.chat.id.toString();
     const clickerId = ctx.from.id.toString();
     
-    // Handling Inline Dynamic Stop via Buttons
     if (data.startsWith('stop_fk_pid_')) {
         const targetPid = data.split('_')[3];
         
@@ -310,7 +309,7 @@ function killAllOperations(ctx) {
     }
 }
 
-// --- 🔬 CORE SCRAPER ENGINE ---
+// --- 🔬 CORE SCRAPER ENGINE (🔥 DEEP ANTI-BLOCK HEADERS ROTATOR) ---
 async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
     if (!activeUsers[chatId]) return;
     const itemIndex = activeUsers[chatId].findIndex(item => item.id === pid);
@@ -319,17 +318,31 @@ async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
     try {
         const response = await axios.get(originalUrl, {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9,hi;q=0.8',
                 'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache'
+                'Pragma': 'no-cache',
+                'Sec-Ch-Ua': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"Windows"',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Upgrade-Insecure-Requests': '1'
             },
-            timeout: 10000
+            timeout: 12000
         });
 
         const html = response.data;
         const lowerHtml = html.toLowerCase();
+
+        // Safety Trigger: Agar page captcha par chala gaya toh log me print karega
+        if (lowerHtml.includes('captcha') || lowerHtml.includes('robot') || html.length < 5000) {
+            console.log(`[SCRAPER WARNING] Blocked by Captcha or Empty Response for PID: ${pid}`);
+            return; 
+        }
 
         let isOutOfStock = false;
         const jsonLdMatch = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
@@ -371,11 +384,11 @@ async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
             if (priceMatch) price = `₹${priceMatch[1]}`;
         }
 
-        // 🔥 FIXED: Ek baar alert bhejte hi tracking automatically KILL ho jayegi!
+        // Trigger and Self-Destruct if product is validated In-Stock
         if (!isSoldOut && hasBuyButtons) {
             const removedItem = activeUsers[chatId][itemIndex];
-            clearInterval(removedItem.interval); // background loop closed instantly
-            activeUsers[chatId].splice(itemIndex, 1); // item array se removed
+            clearInterval(removedItem.interval); 
+            activeUsers[chatId].splice(itemIndex, 1); 
 
             await bot.telegram.sendMessage(chatId, 
                 `🚨 **bhai stock aagya hai** 🚨\n\n💰 **Real-Time Price:** *${price}*\n\n🔗 **Link:** ${originalUrl}`,
@@ -385,7 +398,9 @@ async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
                 }
             ).catch(() => {});
         }
-    } catch (e) {}
+    } catch (e) {
+        console.log(`[SCRAPER ERROR] Request failed for PID ${pid}: ${e.message}`);
+    }
 }
 
 // --- EXPRESS WEB SERVER FOR RENDER PORT BINDING ---
