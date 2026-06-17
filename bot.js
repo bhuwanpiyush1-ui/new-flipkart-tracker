@@ -103,7 +103,6 @@ bot.on('callback_query', async (ctx) => {
             saveApprovedUsers(currentList); 
         }
         await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n✅ **Status: Approved Permanently!**`).catch(() => {});
-        // 🔥 FIXED: Mubarak ho wale message se commands list saaf, sirf panel info bachi hai
         await bot.telegram.sendMessage(targetUserId, "🎉 **Mubarak ho! Admin ne aapka secret access approve kar diya hai! Neeche diye gaye control panel se operation chalu karo.**", getProKeyboard()).catch(() => {});
     } else if (data.startsWith('decline_')) {
         await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n❌ **Status: Declined!**`).catch(() => {});
@@ -112,12 +111,11 @@ bot.on('callback_query', async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
 });
 
-// --- COMMAND: START (FIXED NO COMMANDS TEXT LIST) ---
+// --- COMMAND: START ---
 bot.start((ctx) => {
     const userId = ctx.from.id.toString();
     if (isUserApproved(userId)) {
         delete userSessions[userId]; 
-        // 🔥 FIXED: Pura kachra saaf, ab seedha control panel se use karne ko bolega
         return ctx.reply(`🤖 *Welcome ${ctx.from.first_name || ''}!* Secret Control Panel Activated!\n\nNeeche diye gaye buttons par click karke direct use karo boss, ab kuch type karne ka jhanjhat nahi! 😎`, getProKeyboard());
     }
     
@@ -205,7 +203,7 @@ bot.hears('🚀 Start Track', (ctx) => {
 bot.hears('📋 List Active', (ctx) => { displayActiveTracks(ctx); });
 bot.hears('🛑 Stop All Operations', (ctx) => { killAllOperations(ctx); });
 
-// Fallbacks are redirected cleanly to the dynamic prompts
+// Fallbacks
 bot.command('start_track', async (ctx) => {
     const userId = ctx.from.id.toString();
     if (!isUserApproved(userId)) return;
@@ -352,7 +350,7 @@ async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
     } catch (e) {}
 }
 
-// --- EXPRESS WEB SERVER FOR RENDER PORT BINDING ---
+// --- 🔥 FIXED EXPRESS INSTANCE & RENDER PORT BINDING ---
 const app = express();
 const PORT = process.env.PORT || 10000;
 
@@ -370,5 +368,5 @@ app.listen(PORT, '0.0.0.0', () => {
         polling: {
             dropPendingUpdates: true 
         }
-    }).then(() => console.log("Master Panel UI Polished Live..."));
+    }).then(() => console.log("Master Panel UI Fixed & Live..."));
 });
