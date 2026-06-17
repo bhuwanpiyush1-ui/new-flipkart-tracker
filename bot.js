@@ -1,66 +1,89 @@
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 const express = require('express');
-const fs = require('fs'); // Permanent Storage ke liye
+const fs = require('fs');
 const path = require('path');
 
 // --- CONFIGURATION ---
-const BOT_TOKEN = '8923597334:AAEm75cG0EbDinDksLc2Dki28EYfjbfS_eQ'; 
+const BOT_TOKEN = '8980239383:AAFwZVEzP0lTYoIG3-HYig4xTz47L1n0lXY'; 
 const ADMIN_CHAT_ID = '7485181331'; 
-const CHECK_INTERVAL = 15000; 
+const CHECK_INTERVAL = 30000; // 30 second loop
+const RENDER_URL = 'https://fk-financial-tracker.onrender.com'; // Locked Live URL
 const DB_FILE = path.join(__dirname, 'database.json');
 // ---------------------
 
 const bot = new Telegraf(BOT_TOKEN);
 const activeUsers = {};
-const userSessions = {}; // User ka status check rakhne ke liye
+const userSessions = {}; // Handles user tracking state silently
 
-// Helper to escape special MarkdownV2 characters safely
-function escapeMarkdown(text) {
-    if (!text) return '';
-    return String(text).replace(/[_*\[\]()~`>#+\-=|{}.!]/g, '\\$&');
-}
+// HARD ENGINE CACHE: Prevents file lock crashes
+let approvedUsersCache = [];
 
-// Permanent Control Panel Keyboard Layout
-const getProKeyboard = () => {
-    return Markup.keyboard([
-        ['🚀 Start Track', '📋 List Active'],
-        ['🛑 Stop All Operations']
-    ]).resize();
-};
-
-// --- 📂 PERMANENT DATABASE STORAGE LOGIC ---
-function loadApprovedUsers() {
+// --- 📂 BULLET-PROOF DATABASE LOGIC ---
+function initDatabase() {
     try {
         if (!fs.existsSync(DB_FILE)) {
             const initialData = [ADMIN_CHAT_ID.toString()];
             fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2));
-            return initialData;
+            approvedUsersCache = initialData;
+            return;
         }
         const fileContent = fs.readFileSync(DB_FILE, 'utf8');
+        if (!fileContent.trim()) {
+            approvedUsersCache = [ADMIN_CHAT_ID.toString()];
+            return;
+        }
         const users = JSON.parse(fileContent);
+        if (!Array.isArray(users)) {
+            approvedUsersCache = [ADMIN_CHAT_ID.toString()];
+            return;
+        }
         if (!users.includes(ADMIN_CHAT_ID.toString())) {
             users.push(ADMIN_CHAT_ID.toString());
         }
-        return users.map(String);
+        approvedUsersCache = users.map(String);
     } catch (e) {
-        return [ADMIN_CHAT_ID.toString()];
+        approvedUsersCache = [ADMIN_CHAT_ID.toString()];
     }
 }
+
+// Initialize database cache instantly
+initDatabase();
 
 function saveApprovedUsers(usersList) {
     try {
         const uniqueUsers = [...new Set(usersList.map(String))];
+        if (!uniqueUsers.includes(ADMIN_CHAT_ID.toString())) {
+            uniqueUsers.push(ADMIN_CHAT_ID.toString());
+        }
+        approvedUsersCache = uniqueUsers; 
         fs.writeFileSync(DB_FILE, JSON.stringify(uniqueUsers, null, 2));
     } catch (e) {}
 }
 
 function isUserApproved(userId) {
     if (!userId) return false;
-    const currentList = loadApprovedUsers();
-    return currentList.includes(userId.toString());
+    return approvedUsersCache.includes(userId.toString());
 }
 // --------------------------------------------
+
+const app = express();
+const PORT = process.env.PORT || 10000;
+app.get('/', (req, res) => res.status(200).send('Financial Core Engine Fixed Live!'));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Port Binding Successful on ${PORT}`));
+
+// 🔥 SILENT 30-SECOND NON-STOP JHATKA SYSTEM (NO LOGS)
+setInterval(() => {
+    axios.get(RENDER_URL).catch(() => {}); 
+}, 30000); 
+
+// Permanent Panel Buttons Layout
+const getProKeyboard = () => {
+    return Markup.keyboard([
+        ['🚀 Track Both', '🛵 Track Bank'],
+        ['📋 List Active', '🛑 Stop All Operations']
+    ]).resize();
+};
 
 // --- CALLBACK BUTTONS HANDLER ---
 bot.on('callback_query', async (ctx) => {
@@ -68,163 +91,111 @@ bot.on('callback_query', async (ctx) => {
     const chatId = ctx.chat.id.toString();
     const clickerId = ctx.from.id.toString();
     
-    // Handling Inline Dynamic Stop via Buttons
-    if (data.startsWith('stop_fk_pid_')) {
-        const targetPid = data.split('_')[3];
-        
-        if (activeUsers[chatId] && activeUsers[chatId].length > 0) {
-            const index = activeUsers[chatId].findIndex(item => item.id === targetPid);
+    // Dynamic stop system for specific links
+    if (data.startsWith('stop_fk_')) {
+        const index = parseInt(data.split('_')[2]);
+        if (activeUsers[chatId] && activeUsers[chatId][index]) {
+            const removedItem = activeUsers[chatId][index];
+            clearInterval(removedItem.interval);
+            activeUsers[chatId].splice(index, 1);
             
-            if (index !== -1) {
-                const removedItem = activeUsers[chatId][index];
-                clearInterval(removedItem.interval); 
-                activeUsers[chatId].splice(index, 1); 
-                
-                await ctx.answerCbQuery("Tracking band kar di gayi hai! 🛑").catch(() => {});
-                
-                return ctx.editMessageText(`🛑 **Tracking Stopped Permanently\\!**\n\n📦 *Product ID:* \`${escapeMarkdown(targetPid)}\`\n🔗 *Link:* [Open Flipkart](${removedItem.url})`, { 
-                    parse_mode: 'MarkdownV2',
-                    disable_web_page_preview: true 
-                }).catch(() => {});
-            }
+            await ctx.answerCbQuery(`Target [${index + 1}] Stopped! 🛑`).catch(() => {});
+            await ctx.editMessageText(`🛑 <b>Target [${index + 1}] permanent saaf kar diya gaya hai!</b> Undercover agent ko is link se wapas bula liya:<br><code>${removedItem.url}</code>`, { parse_mode: 'HTML', disable_web_page_preview: true }).catch(() => {});
+            return;
         }
-        return ctx.answerCbQuery("⚠️ Target already stopped or not found.").catch(() => {});
+        return ctx.answerCbQuery("⚠️ Yeh target pehle se hi band ho chuka hai.").catch(() => {});
     }
 
-    if (clickerId !== ADMIN_CHAT_ID.toString()) {
-        return ctx.answerCbQuery("❌ Unauthorized! Sirf Admin click kar sakta hai.").catch(() => {});
-    }
-    
-    const targetUserId = data.split('_')[1].trim();
-    let currentList = loadApprovedUsers();
-    
-    if (data.startsWith('approve_')) {
-        if (!currentList.includes(targetUserId)) {
-            currentList.push(targetUserId);
-            saveApprovedUsers(currentList); 
-        }
-        await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n✅ **Status: Approved Permanently!**`).catch(() => {});
-        await bot.telegram.sendMessage(targetUserId, "🎉 **Mubarak ho! Admin ne aapka access approve kar diya hai! Neeche diye gaye control panel se tracking chalu karo.**", getProKeyboard()).catch(() => {});
-    } else if (data.startsWith('decline_')) {
-        await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n❌ **Status: Declined!**`).catch(() => {});
-        await bot.telegram.sendMessage(targetUserId, "❌ Sorry! Admin ne aapka access request decline kar diya hai.").catch(() => {});
-    }
-    await ctx.answerCbQuery().catch(() => {});
-});
-
-// --- COMMAND: START ---
-bot.start((ctx) => {
-    const userId = ctx.from.id.toString();
-    if (isUserApproved(userId)) {
-        delete userSessions[userId]; 
-        return ctx.reply(`🤖 *Welcome ${ctx.from.first_name || ''}!* Secret Control Panel Activated!\n\nNeeche diye gaye buttons par click karke direct use karo boss! 😎`, getProKeyboard());
-    }
-    
-    ctx.reply(`🔒 **Access Denied!**\n\nAap abhi approved nahi hain.\nAapki Telegram ID: \`${userId}\`\n\nAdmin ke paas request bhej di gayi hai, kripya wait karein...`);
-    
-    bot.telegram.sendMessage(ADMIN_CHAT_ID, 
-        `🚨 **New Access Request!**\n\n👤 Name: ${ctx.from.first_name || ''}\n🆔 ID: \`${userId}\`\n\n👉 Approve karne ke liye niche click karein:\n\`/approve ${userId}\``,
-        {
-            parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([
-                [
-                    Markup.button.callback('Approve ✅', `approve_${userId}`), 
-                    Markup.button.callback('Decline ❌', `decline_${userId}`)
-                ]
-            ])
-        }
-    ).catch(() => {});
-});
-
-// --- ADMIN COMMANDS ---
-bot.command('approve', (ctx) => {
-    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Sirf Admin hi approve kar sakta hai!");
-    const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
-    if (args.length < 2) return ctx.reply("⚠️ Format: `/approve <User_ID>`");
-    
-    const targetUserId = args[1].trim();
-    let currentList = loadApprovedUsers();
-
-    if (!currentList.includes(targetUserId)) {
-        currentList.push(targetUserId);
-        saveApprovedUsers(currentList); 
-        ctx.reply(`✅ User ID \`${targetUserId}\` ko permanent approve kar diya gaya.`);
-        bot.telegram.sendMessage(targetUserId, "🎉 **Mubarak ho! Admin ne aapka access approve kar diya hai!**", getProKeyboard()).catch(() => {});
-    } else {
-        ctx.reply("⚠️ Yeh user pehle se hi approved hai.");
-    }
-});
-
-bot.command('list_users', (ctx) => {
-    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Sirf Admin hi approved users dekh sakta hai!");
-    const currentList = loadApprovedUsers();
-    if (currentList.length === 0) return ctx.reply("📋 Koyi approved user nahi hai.");
-    
-    let msg = "📋 **Approved Users (Permanent Database):**\n\n";
-    currentList.forEach((user, index) => {
-        msg += `${index + 1}. ID: \`${user}\` ${user === ADMIN_CHAT_ID ? '(👑 Admin)' : ''}\n`;
-    });
-    ctx.reply(msg, { parse_mode: 'Markdown' });
-});
-
-bot.command('remove_user', (ctx) => {
-    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Sirf Admin hi user remove kar sakta hai!");
-    const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
-    if (args.length < 2) return ctx.reply("⚠️ Format: `/remove_user <User_ID>`");
-    
-    const targetUserId = args[1].trim();
-    if (targetUserId === ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Bhai khud ko remove nahi kar sakte!");
-    
-    let currentList = loadApprovedUsers();
-    const index = currentList.indexOf(targetUserId);
-
-    if (index !== -1) {
-        currentList.splice(index, 1);
-        saveApprovedUsers(currentList); 
-        ctx.reply(`❌ User ID \`${targetUserId}\` ka access permanent delete kar diya gaya.`);
-        bot.telegram.sendMessage(targetUserId, "🔒 **bhai admin ne tera access hata diya hai** 🚫", Markup.removeKeyboard()).catch(() => {});
+    // Interactive Inline Button for Removing Users
+    if (data.startsWith('remusr_')) {
+        if (clickerId !== ADMIN_CHAT_ID.toString()) return ctx.answerCbQuery("❌ Unauthorized!").catch(() => {});
+        const targetUserId = data.split('_')[1].trim();
+        
+        const newList = approvedUsersCache.filter(id => id.toString() !== targetUserId.toString());
+        saveApprovedUsers(newList);
         
         if (activeUsers[targetUserId]) {
             activeUsers[targetUserId].forEach(item => clearInterval(item.interval));
             delete activeUsers[targetUserId];
         }
-    } else {
-        ctx.reply("⚠️ Yeh ID database list mein nahi mili.");
+        
+        await ctx.answerCbQuery("Agent Booted! ❌").catch(() => {});
+        await ctx.editMessageText(`❌ <b>Agent ${targetUserId} ka licence permanent cancel kar diya gaya hai!</b> Database clean up successful.`, { parse_mode: 'HTML' }).catch(() => {});
+        bot.telegram.sendMessage(targetUserId, "🔒 <b>Your session has been terminated by Admin. Access revoked!</b>").catch(() => {});
+        return;
     }
+
+    if (clickerId !== ADMIN_CHAT_ID.toString()) return ctx.answerCbQuery("❌ Unauthorized!").catch(() => {});
+    const targetUserId = data.split('_')[1].trim();
+    
+    if (data.startsWith('approve_')) {
+        if (!approvedUsersCache.includes(targetUserId)) {
+            approvedUsersCache.push(targetUserId);
+            saveApprovedUsers(approvedUsersCache);
+        }
+        await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n✅ **Mission Status: Agent Activated Permanently!**`).catch(() => {});
+        await bot.telegram.sendMessage(targetUserId, "🎉 **Mubarak ho! Admin ne aapka secret access approve kar diya hai! Neeche diye gaye control panel se operation chalu karo.**", getProKeyboard()).catch(() => {});
+    } else if (data.startsWith('decline_')) {
+        await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n❌ **Mission Status: Access Request Burnt!**`).catch(() => {});
+    }
+    await ctx.answerCbQuery().catch(() => {});
 });
 
-// --- CORE PANEL BUTTON INTERFACES ---
-bot.hears('🚀 Start Track', (ctx) => {
+// --- COMMANDS MATRIX ---
+bot.start((ctx) => {
+    const userId = ctx.from.id.toString();
+    const name = `${ctx.from.first_name || ''}`.trim();
+    
+    if (isUserApproved(userId)) {
+        delete userSessions[userId]; 
+        return ctx.reply(`🤖 *Welcome Agent ${name}!* Secret Control Panel Activated!\n\nNeeche diye gaye buttons par click karke direct use karo boss! 😎`, getProKeyboard());
+    }
+    
+    ctx.reply(`🔒 **Access Denied!** ID: \`${userId}\` \nAdmin ke paas request bhej di gayi hai.`);
+    
+    bot.telegram.sendMessage(ADMIN_CHAT_ID, `🚨 **Khufiya Report: New Agent Request!**\n\nControl Room Check! Ek naya banda secret network par aane ke liye line par aaya hai.\n👤 Name: *${name}*\n🆔 ID: \`${userId}\``, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([[Markup.button.callback('Approve Permanent ✅', `approve_${userId}`), Markup.button.callback('Decline ❌', `decline_${userId}`)]])
+    }).catch(() => {});
+});
+
+// --- KEYBOARD BUTTON TRIGGERS ---
+bot.hears('🚀 Track Both', (ctx) => {
     const userId = ctx.from.id.toString();
     if (!isUserApproved(userId)) return;
-    userSessions[userId] = 'awaiting_link';
-    ctx.reply("🕵️‍♂️ **Stock Engine Scanner Ready!**\n\nAb seedha Flipkart ka **link paste karke send kar do** bhai!");
+    userSessions[userId] = 'both'; 
+    ctx.reply("🕵️‍♂️ **Agent Price + Bank Engine Ready!**\n\nAb seedha Flipkart ka **link paste karke send kar do** bhai!");
 });
 
+bot.hears('🛵 Track Bank', (ctx) => {
+    const userId = ctx.from.id.toString();
+    if (!isUserApproved(userId)) return;
+    userSessions[userId] = 'bankonly'; 
+    ctx.reply("🕵️‍♂️ **Agent Only-Bank Engine Ready!**\n\nAb seedha Flipkart ka **link paste karke send kar do** bhai!");
+});
+
+bot.command('track_both', async (ctx) => { handleLegacyCommands(ctx, 'both', 'Price + Deep Bank Offers'); });
+bot.command('track_bank', async (ctx) => { handleLegacyCommands(ctx, 'bankonly', 'Only Deep Bank Offers'); });
+
+bot.command('list_track', (ctx) => { displayActiveTracks(ctx); });
 bot.hears('📋 List Active', (ctx) => { displayActiveTracks(ctx); });
+
+bot.command('stop_all', (ctx) => { killAllOperations(ctx); });
 bot.hears('🛑 Stop All Operations', (ctx) => { killAllOperations(ctx); });
 
-bot.command('start_track', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    if (!isUserApproved(userId)) return;
-    userSessions[userId] = 'awaiting_link';
-    ctx.reply("🕵️‍♂️ **Stock Engine Scanner Ready!**\n\nAb seedha Flipkart ka **link paste karke send kar do** bhai!");
-});
-bot.command('list_track', (ctx) => { displayActiveTracks(ctx); });
-bot.command('stop_all', (ctx) => { killAllOperations(ctx); });
-
-// --- SMART PANEL TEXT MESSAGES INTERCEPTOR ENGINE ---
+// --- SMART INCOMING MESSAGE INTERCEPTOR ---
 bot.on('text', async (ctx) => {
     const userId = ctx.from.id.toString();
-    const chatId = ctx.chat.id.toString();
     if (!isUserApproved(userId)) return;
 
     const textInput = ctx.message.text.trim();
 
-    if (['🚀 Start Track', '📋 List Active', '🛑 Stop All Operations'].includes(textInput)) return;
-    if (textInput.startsWith('/')) return;
+    if (['🚀 Track Both', '🛵 Track Bank', '📋 List Active', '🛑 Stop All Operations'].includes(textInput)) return;
 
-    if (userSessions[userId] === 'awaiting_link') {
+    if (userSessions[userId]) {
+        const mode = userSessions[userId];
+        const modeLabel = mode === 'both' ? 'Price + Deep Bank Offers' : 'Only Deep Bank Offers';
+        
         const args = textInput.replace(/\n/g, ' ').split(' ').filter(arg => arg.trim() !== '');
         let fkLink = args.find(arg => arg.includes('flipkart.com/'));
 
@@ -232,86 +203,188 @@ bot.on('text', async (ctx) => {
             return ctx.reply(`❌ **Abe saaf link bhejo Agent!**\nInput mein Flipkart ka link nahi mila. Dobara sahi se link bhejo!`, getProKeyboard());
         }
 
-        setupCoreScraperSystem(ctx, fkLink);
+        setupCoreScraperSystem(ctx, fkLink, mode, modeLabel);
         delete userSessions[userId]; 
     } else {
         if (textInput.includes('flipkart.com/')) {
-            ctx.reply(`💡 **Bhai pehle panel se "🚀 Start Track" select karo, fir link bhejo!**`, getProKeyboard());
+            ctx.reply(`💡 **Bhai pehle select toh karo kya track karna hai!**\nNeeche panel se \`🚀 Track Both\` ya \`🛵 Track Bank\` select karo, fir link bhejo!`, getProKeyboard());
         }
     }
 });
 
-function setupCoreScraperSystem(ctx, fkLink) {
+function handleLegacyCommands(ctx, mode, modeLabel) {
+    const args = ctx.message.text.replace(/\n/g, ' ').split(' ').filter(arg => arg.trim() !== '');
+    let fkLink = args.find(arg => arg.includes('flipkart.com/'));
+    if (!fkLink) return ctx.reply(`❌ Format Error! Commands ke sath space dekar link bhejein.`);
+    setupCoreScraperSystem(ctx, fkLink, mode, modeLabel);
+}
+
+function setupCoreScraperSystem(ctx, fkLink, mode, modeLabel) {
     const chatId = ctx.chat.id.toString();
     
     let pid = "";
     try {
         const urlObj = new URL(fkLink);
         pid = urlObj.searchParams.get('pid');
-        if (!pid) {
-            const pidMatch = fkLink.match(/pid=([A-Z0-9]+)/i);
-            if (pidMatch) pid = pidMatch[1];
-        }
     } catch (e) {}
 
     if (!pid) {
-        pid = Buffer.from(fkLink).toString('base64').substring(0, 10);
+        const pidMatch = fkLink.match(/pid=([A-Z0-9]+)/i);
+        if (pidMatch) pid = pidMatch[1];
     }
+    if (!pid) pid = Buffer.from(fkLink).toString('base64').substring(0, 10);
 
     if (!activeUsers[chatId]) activeUsers[chatId] = [];
-    if (activeUsers[chatId].some(item => item.id === pid)) return ctx.reply("⚠️ Yeh product pehle se track ho raha hai!");
-    
-    const intervalId = setInterval(() => { checkFlipkartStock(ctx, chatId, pid, fkLink); }, CHECK_INTERVAL);
-    activeUsers[chatId].push({ id: pid, url: fkLink, interval: intervalId });
-    
-    ctx.reply(`🚀 **Flipkart Tracking Active!**\n📦 Product locked successfully.\nStock scanning live...`, getProKeyboard());
-    checkFlipkartStock(ctx, chatId, pid, fkLink);
+    if (activeUsers[chatId].some(item => item.id === pid)) return ctx.reply("⚠️ Abe ye target pehle se hi radar par locked hai!");
+
+    const intervalId = setInterval(() => { checkFinancialFluctuations(ctx, chatId, pid, fkLink, mode); }, CHECK_INTERVAL);
+
+    activeUsers[chatId].push({
+        id: pid,
+        url: fkLink,
+        mode: modeLabel,
+        interval: intervalId,
+        alertFired: false,
+        lastPrice: null,
+        lastOffers: null,
+        lastOffersRaw: []
+    });
+
+    ctx.reply(`🕵️‍♂️ **Undercover Agent Active!**\n\nBhai, tu Flipkart waalon ke liye ek "secret spy" chhod raha hai. \n\n☕ Chal ab tu aaram se jaake **chai-wai piyo ya mast neend poori karo**, unki lanka lagane ka kaam tere bhai par locked hai! 💣🚀`);
+
+    checkFinancialFluctuations(ctx, chatId, pid, fkLink, mode);
 }
 
-// --- FIXED DISPLAY MENU ---
-async function displayActiveTracks(ctx) {
+function displayActiveTracks(ctx) {
     const userId = ctx.from.id.toString();
-    const chatId = ctx.chat.id.toString();
     if (!isUserApproved(userId)) return;
+    const chatId = ctx.chat.id.toString();
     
-    const currentList = activeUsers[chatId] || activeUsers[userId] || [];
-    if (currentList.length === 0) {
-        return ctx.reply("😴 Koyi active tracking links nahi chal rahe hain.", getProKeyboard());
+    if (!activeUsers[chatId] || activeUsers[chatId].length === 0) {
+        return ctx.reply("😴 Abhi koi target radar par nahi hai, sab shant hai.");
     }
     
-    let msg = "📋 *Radar Par Locked Targets Matrix:*\n\n";
-    let inlineButtons = [];
+    let msg = "📋 <b>Radar Par Locked Targets Matrix:</b>\n\n";
+    let keyboardButtons = [];
+    let currentRow = [];
 
-    currentList.forEach((item, index) => {
-        msg += `*${index + 1}\\.* 📦 *ID:* \`${escapeMarkdown(item.id)}\` \n🔗 *Link:* [Click Here To Open](${item.url})\n\n`;
-        inlineButtons.push([Markup.button.callback(`Stop Tracking 🛑`, `stop_fk_pid_${item.id}`)]);
-    });
+    for (let index = 0; index < activeUsers[chatId].length; index++) {
+        const item = activeUsers[chatId][index];
+        msg += `🔢 <b>Target [${index + 1}]</b>\n📦 <b>ID:</b> <code>${item.id}</code>\n⚙️ <b>Mode:</b> <code>[${item.mode}]</code>\n🔗 <b>Link:</b> ${item.url}\n\n`;
+        
+        currentRow.push(Markup.button.callback(`Stop ${index + 1} 🛑`, `stop_fk_${index}`));
+        
+        if (currentRow.length === 2) {
+            keyboardButtons.push(currentRow);
+            currentRow = [];
+        }
+    }
     
-    await ctx.reply(msg, {
-        parse_mode: 'MarkdownV2',
+    if (currentRow.length > 0) {
+        keyboardButtons.push(currentRow);
+    }
+
+    ctx.reply(msg, { 
+        parse_mode: 'HTML', 
         disable_web_page_preview: true,
-        ...Markup.inlineKeyboard(inlineButtons)
-    }).catch(() => {});
+        ...Markup.inlineKeyboard(keyboardButtons)
+    }).catch((err) => {
+        ctx.reply("⚠️ Structural layout re-syncing. Please try again.");
+    });
 }
 
 function killAllOperations(ctx) {
     const userId = ctx.from.id.toString();
-    const chatId = ctx.chat.id.toString();
     if (!isUserApproved(userId)) return;
-    
-    const targets = activeUsers[chatId] || activeUsers[userId] || [];
-    if (targets.length > 0) {
-        targets.forEach(item => clearInterval(item.interval));
+    const chatId = ctx.chat.id.toString();
+    if (activeUsers[chatId] && activeUsers[chatId].length > 0) {
+        activeUsers[chatId].forEach(item => clearInterval(item.interval));
         delete activeUsers[chatId];
-        delete activeUsers[userId];
-        ctx.reply("🛑 Saare undercover agents ko headquarter wapas bula liya gya hai! Matrix cleared.", getProKeyboard());
-    } else { 
-        ctx.reply("⚠️ Koyi active tracking nahi mili.", getProKeyboard()); 
-    }
+        ctx.reply("🛑 Saare undercover agents ko headquarter wapas bula liya gya hai! Matrix cleared.");
+    } else { ctx.reply("⚠️ Koyi active operation chal hi nahi rahi."); }
 }
 
-// --- 🔬 CORE SCRAPER ENGINE ---
-async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
+bot.command('approve', (ctx) => {
+    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) {
+        return ctx.reply("❌ **Access Denied!** Yeh command sirf asli Admin hi chala sakta hai. 😎");
+    }
+    const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
+    if (args.length < 2) return ctx.reply("⚠️ Format: `/approve <user_id>`");
+    const targetUserId = args[1].trim();
+    
+    if (!approvedUsersCache.includes(targetUserId)) {
+        approvedUsersCache.push(targetUserId);
+        saveApprovedUsers(approvedUsersCache);
+        ctx.reply(`✅ Agent \`${targetUserId}\` ko permanent access de diya gaya hai!`, { parse_mode: 'Markdown' });
+    } else {
+        ctx.reply("⚠️ Yeh ID pehle se hi approved list mein hai.");
+    }
+});
+
+// 🔥 INTERACTIVE USER MANAGEMENT PANEL
+bot.command('manage_users', (ctx) => {
+    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) {
+        return ctx.reply("❌ **Access Denied!** Yeh command sirf asli Admin hi chala sakta hai. 😎");
+    }
+    
+    const rawUsers = approvedUsersCache.filter(id => id.toString() !== ADMIN_CHAT_ID.toString());
+    
+    if (rawUsers.length === 0) {
+        return ctx.reply("📋 **Database Room Status:** Abhi admin ke alawa koi dusra approved agent network par nahi hai.");
+    }
+    
+    let msg = "🛠️ **Loot Room Management Console:**\nNeeche approved users ki list hai, click karke permanent remove karo:\n\n";
+    let keyboardButtons = [];
+    
+    rawUsers.forEach((u, i) => {
+        msg += `${i + 1}. 🆔 User ID: <code>${u}</code>\n`;
+        keyboardButtons.push([Markup.button.callback(`Remove User ${u} ❌`, `remusr_${u}`)]);
+    });
+    
+    ctx.reply(msg, {
+        parse_mode: 'HTML',
+        ...Markup.inlineKeyboard(keyboardButtons)
+    });
+});
+
+bot.command('list_users', (ctx) => {
+    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) {
+        return ctx.reply("❌ **Access Denied!** Yeh command sirf asli Admin hi chala sakta hai. 😎");
+    }
+    let msg = "📋 **Approved Secret Agents Database List:**\n\n";
+    approvedUsersCache.forEach(u => msg += `- \`${u}\`\n`);
+    ctx.reply(msg, { parse_mode: 'Markdown' });
+});
+
+bot.command('remove_user', (ctx) => {
+    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) {
+        return ctx.reply("❌ **Access Denied!**");
+    }
+    const parts = ctx.message.text.trim().split(' ');
+    if (parts.length < 2) return ctx.reply("⚠️ Use: `/remove_user <user_id>`");
+    const targetUserId = parts[1].trim();
+
+    if (targetUserId === ADMIN_CHAT_ID.toString()) {
+        return ctx.reply("⚠️ Admin ko remove nahi kiya ja sakta.");
+    }
+
+    const idx = approvedUsersCache.indexOf(targetUserId);
+    if (idx !== -1) {
+        const newList = approvedUsersCache.filter(id => id.toString() !== targetUserId.toString());
+        saveApprovedUsers(newList);
+        if (activeUsers[targetUserId]) {
+            activeUsers[targetUserId].forEach(item => clearInterval(item.interval));
+            delete activeUsers[targetUserId];
+        }
+        ctx.reply(`❌ Agent \`${targetUserId}\` permanent saaf!`);
+        bot.telegram.sendMessage(targetUserId, "🔒 <b>Your session has been terminated by Admin. Access revoked!</b>").catch(() => {});
+    } else {
+        ctx.reply("⚠️ User list mein nahi mila. Dynamic Panel use karein: `/manage_users`");
+    }
+});
+
+// --- 🔬 CORE BREAKDOWN SCRAPER ENGINE ---
+async function checkFinancialFluctuations(ctx, chatId, pid, originalUrl, mode) {
     if (!activeUsers[chatId]) return;
     const itemIndex = activeUsers[chatId].findIndex(item => item.id === pid);
     if (itemIndex === -1) return;
@@ -319,92 +392,111 @@ async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
     try {
         const response = await axios.get(originalUrl, {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
             },
-            timeout: 10000
+            timeout: 12000 
         });
 
         const html = response.data;
-        const lowerHtml = html.toLowerCase();
-
-        let isOutOfStock = false;
-        const jsonLdMatch = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
         
-        if (jsonLdMatch && jsonLdMatch[1]) {
-            try {
-                const jsonData = JSON.parse(jsonLdMatch[1].trim());
-                const itemData = Array.isArray(jsonData) ? jsonData.find(i => i["@type"] === "Product" || i.offers) : jsonData;
-                if (itemData && itemData.offers) {
-                    const availability = Array.isArray(itemData.offers) ? itemData.offers[0].availability : itemData.offers.availability;
-                    if (availability && String(availability).toLowerCase().includes('outofstock')) {
-                        isOutOfStock = true;
-                    }
-                }
-            } catch (e) {}
-        }
-
-        const hasOutKeywords = lowerHtml.includes('currently out of stock') || 
-                               lowerHtml.includes('coming soon') || 
-                               lowerHtml.includes('sold out') ||
-                               lowerHtml.includes('out of stock');
-
-        const isSoldOut = isOutOfStock || hasOutKeywords;
-        const hasBuyButtons = lowerHtml.includes('buy now') || lowerHtml.includes('add to cart');
-
-        let price = "N/A";
+        let currentPrice = "N/A";
+        const jsonLdMatch = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
         if (jsonLdMatch && jsonLdMatch[1]) {
             try {
                 const jsonData = JSON.parse(jsonLdMatch[1].trim());
                 const itemData = Array.isArray(jsonData) ? jsonData.find(i => i["@type"] === "Product" || i.offers) : jsonData;
                 if (itemData && itemData.offers) {
                     let priceVal = Array.isArray(itemData.offers) ? itemData.offers[0].price : itemData.offers.price;
-                    if (priceVal) price = `₹${priceVal}`;
+                    if (priceVal) currentPrice = String(priceVal).replace(/[^0-9]/g, '');
                 }
             } catch (e) {}
         }
-        if (price === "N/A") {
+        if (currentPrice === "N/A") {
             let priceMatch = html.match(/"price"\s*:\s*"?([0-9]+)"?/i);
-            if (priceMatch) price = `₹${priceMatch[1]}`;
+            if (priceMatch) currentPrice = priceMatch[1];
         }
 
-        // 🔥 FIXED: Ek baar alert bhejte hi tracking automatically KILL ho jayegi!
-        if (!isSoldOut && hasBuyButtons) {
-            const removedItem = activeUsers[chatId][itemIndex];
-            clearInterval(removedItem.interval); // background loop closed instantly
-            activeUsers[chatId].splice(itemIndex, 1); // item array se removed
+        let currentOffersRaw = [];
+        const offerRegex = /(?:bank offer|instant discount| cashback|off on credit card|off on debit card|emi)[^<"'\x7b\x7d\(\)]+/gi;
+        let match;
+        let combinedOffersText = "";
+        
+        while ((match = offerRegex.exec(html)) !== null && currentOffersRaw.length < 5) {
+            let cleanOffer = match[0].replace(/<\/?[^>]+(>|$)/g, "").trim();
+            cleanOffer = cleanOffer.replace(/[a-zA-Z0-9\-_.]+\.[a-zA-Z0-9]+.*/g, "").trim();
+            
+            if (cleanOffer.length > 12 && cleanOffer.length < 120 && !currentOffersRaw.includes(cleanOffer) && !cleanOffer.includes('font-family') && !cleanOffer.includes('emit')) {
+                currentOffersRaw.push(currentOffersRaw.length);
+                currentOffersRaw[currentOffersRaw.length - 1] = cleanOffer;
+                combinedOffersText += `🔹 ${cleanOffer}\n`;
+            }
+        }
+        if (!combinedOffersText) combinedOffersText = "No active bank offers detected on page.";
+
+        let instance = activeUsers[chatId][itemIndex];
+
+        if (instance.lastPrice === null && instance.lastOffers === null) {
+            instance.lastPrice = currentPrice;
+            instance.lastOffers = combinedOffersText;
+            instance.lastOffersRaw = currentOffersRaw;
+            return;
+        }
+
+        let isFluctuationDetected = false;
+        let changeLogs = [];
+
+        if (mode === 'both') {
+            if (currentPrice !== "N/A" && instance.lastPrice !== "N/A" && currentPrice !== instance.lastPrice) {
+                isFluctuationDetected = true;
+                changeLogs.push(`💰 <b>PRICE CHANGE DETECTED:</b>\n📉 Old Price: ₹${instance.lastPrice}\n📈 New Price: ₹${currentPrice}`);
+            }
+        }
+
+        if (combinedOffersText !== instance.lastOffers) {
+            isFluctuationDetected = true;
+            
+            let addedOffers = currentOffersRaw.filter(x => !instance.lastOffersRaw.includes(x));
+            let removedOffers = instance.lastOffersRaw.filter(x => !currentOffersRaw.includes(x));
+
+            let offerChangeMsg = `💳 <b>BANK OFFER TEXT/VALUE CHANGED:</b>\n`;
+            if (addedOffers.length > 0) {
+                offerChangeMsg += `✅ <b>Naya Offer Add Hua:</b>\n${addedOffers.map(o => `👉 ${o}`).join('\n')}\n`;
+            }
+            if (removedOffers.length > 0) {
+                offerChangeMsg += `❌ <b>Purana Offer Hat Gya:</b>\n${removedOffers.map(o => `👉 ${o}`).join('\n')}\n`;
+            }
+            if (addedOffers.length === 0 && removedOffers.length === 0) {
+                offerChangeMsg += `⚠️ <i>Offers ke numeric values/EMI conditions badle hain!</i>`;
+            }
+            changeLogs.push(offerChangeMsg);
+        }
+
+        if (isFluctuationDetected || instance.alertFired === true) {
+            if (isFluctuationDetected && !instance.savedChangeLogs) {
+                instance.savedChangeLogs = changeLogs.join('\n\n');
+                instance.lastPrice = currentPrice;
+                instance.lastOffers = combinedOffersText;
+                instance.lastOffersRaw = currentOffersRaw;
+            }
+            
+            instance.alertFired = true; 
+            let priceDisplay = currentPrice !== "N/A" ? `₹${currentPrice}` : "N/A";
+            let displayLogs = instance.savedChangeLogs || `⚠️ <i>System Alert:</i> Fluctuations observed!`;
 
             await bot.telegram.sendMessage(chatId, 
-                `🚨 **bhai stock aagya hai** 🚨\n\n💰 **Real-Time Price:** *${price}*\n\n🔗 **Link:** ${originalUrl}`,
-                { 
-                    parse_mode: 'Markdown',
-                    ...Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_fk_pid_${pid}`)]])
+                `🔥 <b>Oo bhaiiii price ya offers badal gya hai jldi ja lgake lgane!</b> 🔥\n\n${displayLogs}\n\n📊 <b>Current Live Snapshot:</b>\n💰 Price: <b>${priceDisplay}</b>\n🏛️ Live Bank Terms:\n${combinedOffersText}\n\nLink:\n${originalUrl}`,
+                {
+                    parse_mode: 'HTML',
+                    ...Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_fk_${itemIndex}`)]])
                 }
             ).catch(() => {});
         }
-    } catch (e) {}
+
+    } catch (err) {}
 }
 
-// --- EXPRESS WEB SERVER FOR RENDER PORT BINDING ---
-const app = express();
-const PORT = process.env.PORT || 10000;
-
-app.get('/', (req, res) => res.status(200).send('Permanent Storage Panel Engine Live!'));
-
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Master Engine Port Binding Successful on ${PORT}`);
-    
-    setInterval(() => {
-        const targetUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:' + PORT;
-        axios.get(targetUrl).catch(() => {}); 
-    }, 30000); 
-
-    bot.launch({
-        polling: {
-            dropPendingUpdates: true 
-        }
-    }).then(() => console.log("Master Panel Stock Engine Live..."));
+// FORCE FLUSH TO CLEAR DEPLOY CONFLICTS
+bot.telegram.deleteWebhook().then(() => {
+    bot.launch().then(() => console.log("Spy Control Pro Stable Layout Live..."));
 });
