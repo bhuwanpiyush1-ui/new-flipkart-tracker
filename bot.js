@@ -59,16 +59,28 @@ bot.on('callback_query', async (ctx) => {
     const chatId = ctx.chat.id.toString();
     const clickerId = ctx.from.id.toString();
     
-    if (data.startsWith('stop_fk_')) {
-        const index = parseInt(data.split('_')[2]);
-        if (activeUsers[chatId] && activeUsers[chatId][index]) {
-            const removedItem = activeUsers[chatId][index];
-            clearInterval(removedItem.interval);
-            activeUsers[chatId].splice(index, 1);
-            await ctx.answerCbQuery("Tracking band kar di gayi hai! 🛑").catch(() => {});
-            return ctx.reply(`🛑 Stopped tracking for:\n${removedItem.url}`, { disable_web_page_preview: true });
+    // 🔥 HANDLING DYNAMIC BUTTON REMOVAL BY UNIQUE PID
+    if (data.startsWith('stop_fk_pid_')) {
+        const targetPid = data.split('_')[3];
+        
+        if (activeUsers[chatId] && activeUsers[chatId].length > 0) {
+            const index = activeUsers[chatId].findIndex(item => item.id === targetPid);
+            
+            if (index !== -1) {
+                const removedItem = activeUsers[chatId][index];
+                clearInterval(removedItem.interval); // background loop closed
+                activeUsers[chatId].splice(index, 1); // RAM context array cleared
+                
+                await ctx.answerCbQuery("Tracking band kar di gayi hai! 🛑").catch(() => {});
+                
+                // Message edit karke confirm karega ki band ho gaya
+                return ctx.editMessageText(`🛑 **Tracking Stopped Permanently\\!**\n\n📦 *Product ID:* \`${escapeMarkdown(targetPid)}\`\n🔗 *Link:* [Open Flipkart](${removedItem.url})`, { 
+                    parse_mode: 'MarkdownV2',
+                    disable_web_page_preview: true 
+                }).catch(() => {});
+            }
         }
-        return ctx.answerCbQuery("⚠️ Already stopped.").catch(() => {});
+        return ctx.answerCbQuery("⚠️ Target already stopped or not found.").catch(() => {});
     }
 
     if (clickerId !== ADMIN_CHAT_ID.toString()) {
@@ -84,7 +96,6 @@ bot.on('callback_query', async (ctx) => {
             saveApprovedUsers(currentList); 
         }
         await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n✅ **Status: Approved Permanently!**`).catch(() => {});
-        
         await bot.telegram.sendMessage(targetUserId, "🎉 **Mubarak ho! Admin ne aapka access approve kar diya hai!**\n\nAb aapka access permanent locked hai.\n👉 Link track karne ke liye format:\n`/start_track <Flipkart_URL>`", { parse_mode: 'Markdown' }).catch(() => {});
     } else if (data.startsWith('decline_')) {
         await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n❌ **Status: Declined!**`).catch(() => {});
@@ -96,8 +107,6 @@ bot.on('callback_query', async (ctx) => {
 // --- COMMAND: START (REQUEST SYSTEM) ---
 bot.start((ctx) => {
     const userId = ctx.from.id.toString();
-    const name = `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim() || 'No Name';
-    
     if (isUserApproved(userId)) {
         return ctx.reply(`🤖 *Welcome ${ctx.from.first_name || ''}!* Master Control Tracker Active!\n\n🔹 **User Commands:**\n🚀 \`/start_track <Flipkart_URL>\` — Naya link lagaen\n📋 \`/list_track\` — Chal rahe active links dekhein\n🛑 \`/stop_all\` — Saari tracking band karein\n\n👑 **Admin Special Commands:**\n✅ \`/approve <User_ID>\` — User permanent allowed karein\n📋 \`/list_users\` — Approved users ki list\n❌ \`/remove_user <User_ID>\` — User block karein`, { parse_mode: 'Markdown' });
     }
@@ -105,7 +114,7 @@ bot.start((ctx) => {
     ctx.reply(`🔒 **Access Denied!**\n\nAap abhi approved nahi hain.\nAapki Telegram ID: \`${userId}\`\n\nAdmin ke paas request bhej di gayi hai, kripya wait karein...`);
     
     bot.telegram.sendMessage(ADMIN_CHAT_ID, 
-        `🚨 **New Access Request!**\n\n👤 Name: ${name}\n🆔 ID: \`${userId}\`\n\n👉 Approve karne ke liye niche click karein ya type karein:\n\`/approve ${userId}\``,
+        `🚨 **New Access Request!**\n\n👤 Name: ${ctx.from.first_name || ''}\n🆔 ID: \`${userId}\`\n\n👉 Approve karne ke liye niche click karein ya type karein:\n\`/approve ${userId}\``,
         {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
@@ -131,7 +140,6 @@ bot.command('approve', (ctx) => {
         currentList.push(targetUserId);
         saveApprovedUsers(currentList); 
         ctx.reply(`✅ User ID \`${targetUserId}\` ko permanent approve kar diya gaya.`);
-        
         bot.telegram.sendMessage(targetUserId, "🎉 **Mubarak ho! Admin ne aapka access approve kar diya hai!**\n\nAb aap bot ka use kar sakte hain.\n👉 Link track karne ke liye format:\n`/start_track <Flipkart_URL>`", { parse_mode: 'Markdown' }).catch(() => {});
     } else {
         ctx.reply("⚠️ Yeh user pehle se hi approved hai.");
@@ -142,7 +150,6 @@ bot.command('approve', (ctx) => {
 bot.command('list_users', (ctx) => {
     if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Sirf Admin hi approved users dekh sakta hai!");
     const currentList = loadApprovedUsers();
-    
     if (currentList.length === 0) return ctx.reply("📋 Koyi approved user nahi hai.");
     
     let msg = "📋 **Approved Users (Permanent Database):**\n\n";
@@ -168,7 +175,6 @@ bot.command('remove_user', (ctx) => {
         currentList.splice(index, 1);
         saveApprovedUsers(currentList); 
         ctx.reply(`❌ User ID \`${targetUserId}\` ka access permanent delete kar diya gaya.`);
-        
         bot.telegram.sendMessage(targetUserId, "🔒 **Aapka access admin dwara remove kar diya gaya hai.**").catch(() => {});
         
         if (activeUsers[targetUserId]) {
@@ -215,8 +221,8 @@ bot.command('start_track', async (ctx) => {
     checkFlipkartStock(ctx, chatId, pid, fkLink);
 });
 
-// --- COMMAND: LIST TRACK (USER & ADMIN) ---
-function displayActiveTracks(ctx) {
+// --- 🔥 UPDATED COMMAND: LIST TRACK WITH INLINE REMOVE BUTTONS ---
+bot.command('list_track', async (ctx) => {
     const userId = ctx.from.id.toString();
     const chatId = ctx.chat.id.toString();
     if (!isUserApproved(userId)) return ctx.reply("❌ Aap approved nahi hain.");
@@ -226,14 +232,22 @@ function displayActiveTracks(ctx) {
         return ctx.reply("😴 Koyi active tracking links nahi chal rahe hain.");
     }
     
-    let msg = "📋 *Aapke Active Tracking Links:*\n\n";
-    currentList.forEach((item, index) => {
-        msg += `*${index + 1}\\.* 📦 *ID:* \`${escapeMarkdown(item.id)}\` \n🔗 *Link:* [Click Here To Open](${item.url})\n\n`;
-    });
-    ctx.reply(msg, { parse_mode: 'MarkdownV2', disable_web_page_preview: true });
-}
+    await ctx.reply("📋 **Radar Par Locked Targets Matrix:**");
 
-bot.command('list_track', (ctx) => { displayActiveTracks(ctx); });
+    // Har product ke liye alag detail message jayega jiske niche uska apna explicit button hoga
+    for (let i = 0; i < currentList.length; i++) {
+        const item = currentList[i];
+        const msg = `*Target #${i + 1}*\n📦 *ID:* \`${escapeMarkdown(item.id)}\`\n🔗 *Link:* [Open Product](${item.url})`;
+        
+        await ctx.reply(msg, {
+            parse_mode: 'MarkdownV2',
+            disable_web_page_preview: true,
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback('Stop Tracking 🛑', `stop_fk_pid_${item.id}`)]
+            ])
+        }).catch(() => {});
+    }
+});
 
 // --- COMMAND: STOP ALL (USER & ADMIN) ---
 bot.command('stop_all', (ctx) => {
@@ -326,7 +340,7 @@ async function checkFlipkartStock(ctx, chatId, pid, originalUrl) {
     } catch (e) {}
 }
 
-// --- 🔥 EXPRESS EXPLICIT WEB SERVER WITH LOCAL ENVIROMENT HOOK ---
+// --- EXPRESS WEB SERVER FOR RENDER PORT BINDING ---
 const app = express();
 const PORT = process.env.PORT || 10000;
 
@@ -335,14 +349,11 @@ app.get('/', (req, res) => res.status(200).send('Permanent Storage Engine Live!'
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Master Engine Port Binding Successful on ${PORT}`);
     
-    // Automatic Dynamic Self-Ping System (No hardcoded URL dependencies)
     setInterval(() => {
-        // Agar dynamic link na mile toh fallback router run hoga binna code crash kiye
         const targetUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:' + PORT;
         axios.get(targetUrl).catch(() => {}); 
     }, 30000); 
 
-    // Bot polling launching safely after ports verification
     bot.launch({
         polling: {
             dropPendingUpdates: true 
